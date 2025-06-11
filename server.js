@@ -17,12 +17,16 @@ const app = express();
 // Create an HTTP server that wraps the Express app
 const server = http.createServer(app);
 
+// Define allowed origins
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://cristaos-frontend.vercel.app',
+];
+
 // Initialize Socket.IO (locally)
 const io = socketIo(server, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' 
-      ? 'https://cristaosbackend.onrender.com' 
-      : 'http://localhost:3000',
+    origin: allowedOrigins,
     methods: ["GET", "POST", "DELETE", "PUT"],
     credentials: true,
   }
@@ -36,15 +40,12 @@ require('./socket')(io); // Assuming you handle your socket logic in `socket/ind
 app.use(express.json());
 
 // Set up CORS configuration for different environments
-const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? 'https://cristaosbackend.onrender.com' 
-    : 'http://localhost:3000',
+// Set up CORS for API
+app.use(cors({
+  origin: allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true, // Allow credentials (cookies, authorization headers, etc.)
-};
-
-app.use(cors(corsOptions));
+  credentials: true,
+}));
 
 
 // Use the imported routes for the API
