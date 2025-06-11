@@ -56,7 +56,7 @@ router.post("/signup", async (req, res) => {
 
     console.log("Sending verification link to email:", email);
     // const verificationUrl = `http://localhost:3000/verifyAccount?token=${verificationToken}`;
-    const verificationUrl = `https://cristaosweb-e5a94083e783.herokuapp.com/verifyAccount?token=${verificationToken}`;
+    const verificationUrl = `https://cristaosbackend.onrender.com/verifyAccount?token=${verificationToken}`;
 
     // Send the email with the verification link
     await sendVerificationLink(email, verificationUrl);
@@ -199,7 +199,7 @@ router.post("/forgotPassword", async (req, res) => {
 
     // create the reset link with the token as a query parameter
     // const resetLink = `http://localhost:3000/passwordReset?token=${resetToken}`
-    const resetLink = `https://cristaosweb-e5a94083e783.herokuapp.com/passwordReset?token=${resetToken}`
+    const resetLink = `https://cristaosbackend.onrender.com/passwordReset?token=${resetToken}`
     
     // Send reset token to the user's email
     await sendResetLink(email, resetLink);

@@ -21,8 +21,8 @@ const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
-      ? 'https://cristaosweb-e5a94083e783.herokuapp.com' 
-      : 'http://localhost:3001',
+      ? 'https://cristaosbackend.onrender.com' 
+      : 'http://localhost:3000',
     methods: ["GET", "POST", "DELETE", "PUT"],
     credentials: true,
   }
@@ -38,7 +38,7 @@ app.use(express.json());
 // Set up CORS configuration for different environments
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? 'https://cristaosweb-e5a94083e783.herokuapp.com' 
+    ? 'https://cristaosbackend.onrender.com' 
     : 'http://localhost:3000',
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true, // Allow credentials (cookies, authorization headers, etc.)
