@@ -51,15 +51,14 @@ app.use(cors(corsOptions));
 app.use('/api', routes);
 
 // Connect to MongoDB using Mongoose
-mongoose.connect(process.env.MONGO_URI, {
-  useUnifiedTopology: true, // This option is set by default
-})
+mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('MongoDB connected successfully');
   })
   .catch((err) => {
     console.error('MongoDB connection error:', err);
   });
+
 
 // Global error handling middleware
 app.use((err, req, res, next) => {
