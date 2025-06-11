@@ -1,0 +1,86 @@
+// Import required modules
+const express = require('express');
+const mongoose = require('mongoose');
+const dotenv = require('dotenv');
+const routes = require('./routes');
+const http = require('http');
+const socketIo = require('socket.io');
+const cors = require('cors');
+const path = require('path');
+
+// Load environment variables from .env file
+dotenv.config();
+
+// Initialize express app
+const app = express();
+
+// Create an HTTP server that wraps the Express app
+const server = http.createServer(app);
+
+// Initialize Socket.IO (locally)
+const io = socketIo(server, {
+  cors: {
+    origin: process.env.NODE_ENV === 'production' 
+      ? 'https://cristaosweb-e5a94083e783.herokuapp.com' 
+      : 'http://localhost:3001',
+    methods: ["GET", "POST", "DELETE", "PUT"],
+    credentials: true,
+  }
+});
+
+
+// Import the Socket.IO handling logic from socket/index.js
+require('./socket')(io); // Assuming you handle your socket logic in `socket/index.js`
+
+// Middleware to parse JSON and handle CORS
+app.use(express.json());
+
+// Set up CORS configuration for different environments
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production' 
+    ? 'https://cristaosweb-e5a94083e783.herokuapp.com' 
+    : 'http://localhost:3000',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true, // Allow credentials (cookies, authorization headers, etc.)
+};
+
+app.use(cors(corsOptions));
+
+
+// Use the imported routes for the API
+app.use('/api', routes);
+
+// Connect to MongoDB using Mongoose
+mongoose.connect(process.env.MONGO_URI, {
+  useUnifiedTopology: true, // This option is set by default
+})
+  .then(() => {
+    console.log('MongoDB connected successfully');
+  })
+  .catch((err) => {
+    console.error('MongoDB connection error:', err);
+  });
+
+// Serve static files from the React app's build folder in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../frontend/build')));
+
+  // Handle all other routes by serving the React frontend
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
+  });
+}
+
+// Global error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ message: 'An unexpected error occurred.' });
+});
+
+// Set the port for the server (use environment variable if available, otherwise default to 5001)
+const PORT = process.env.PORT || 5001;
+
+// Start the server and listen on the specified port
+server.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});

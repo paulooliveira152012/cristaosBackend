@@ -1,0 +1,17 @@
+const express = require('express');
+const userRoutes = require('./userRoutes');
+const listingRoutes = require('./listingRoutes');
+const commentRoutes = require('./commentRoutes');
+const pollRoutes = require('./pollRoutes');
+const rooms = require('./rooms')
+
+const router = express.Router();
+
+router.use('/users', userRoutes); // o nome da colecao que aparece no banco de dados (users)
+router.use('/listings', listingRoutes);
+router.use('/comments', commentRoutes);
+router.use('/polls', pollRoutes);
+router.use('/rooms', rooms)
+
+module.exports = router;
+
