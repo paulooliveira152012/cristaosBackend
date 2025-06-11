@@ -61,16 +61,6 @@ mongoose.connect(process.env.MONGO_URI, {
     console.error('MongoDB connection error:', err);
   });
 
-// Serve static files from the React app's build folder in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../frontend/build')));
-
-  // Handle all other routes by serving the React frontend
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
-  });
-}
-
 // Global error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
