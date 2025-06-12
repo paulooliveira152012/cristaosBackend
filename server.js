@@ -20,6 +20,7 @@ const server = http.createServer(app);
 // Define allowed origins
 const allowedOrigins = [
   'http://localhost:3000',
+  'http://localhost:3002',
   'https://cristaos-frontend.vercel.app',
 ];
 

@@ -4,6 +4,7 @@ const listingRoutes = require('./listingRoutes');
 const commentRoutes = require('./commentRoutes');
 const pollRoutes = require('./pollRoutes');
 const rooms = require('./rooms')
+const uploadImageRoute = require('./upload-url'); 
 
 const router = express.Router();
 
@@ -12,6 +13,7 @@ router.use('/listings', listingRoutes);
 router.use('/comments', commentRoutes);
 router.use('/polls', pollRoutes);
 router.use('/rooms', rooms)
+router.use('/', uploadImageRoute)
 
 module.exports = router;
 
