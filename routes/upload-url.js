@@ -12,6 +12,7 @@ AWS.config.update({
 const s3 = new AWS.S3();
 
 router.get("/upload-url", async (req, res) => {
+    console.log("ROTA DE SUBIR FOTO ALCANCADA")
   const fileName = `${uuidv4()}.jpg`;
   const params = {
     Bucket: "cristaos",
