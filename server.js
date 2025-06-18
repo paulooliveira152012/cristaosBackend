@@ -1,7 +1,7 @@
 // Import required modules
 const express = require('express');
 const mongoose = require('mongoose');
-const dotenv = require('dotenv');
+// const dotenv = require('dotenv');
 const routes = require('./routes');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -12,7 +12,7 @@ const dotenvFlow = require('dotenv-flow')
 
 
 // Load environment variables from .env file
-dotenv.config();
+// dotenv.config();
 
 dotenvFlow.config()
 
@@ -29,7 +29,9 @@ const server = http.createServer(app);
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3002',
-  'https://cristaos-frontend.vercel.app',
+  'https://cristaosfrontend.vercel.app',          // sem hífen
+  'https://cristaos-frontend.vercel.app',         // com hífen
+  'https://www.cristaosfrontend.vercel.app',      // com www, se tiver
 ];
 
 // Initialize Socket.IO (locally)
