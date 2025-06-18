@@ -12,9 +12,12 @@ require('dotenv').config()
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 
+
+
 // User Signup
 // User Signup
 router.post("/signup", async (req, res) => {
+  console.log("rota signup encontrada")
   const { username, email, password, profileImage } = req.body;
 
   console.log("Received fields:", { username, email, password, profileImage });
@@ -55,8 +58,7 @@ router.post("/signup", async (req, res) => {
     console.log("User saved successfully");
 
     console.log("Sending verification link to email:", email);
-    // const verificationUrl = `http://localhost:3000/verifyAccount?token=${verificationToken}`;
-    const verificationUrl = `https://cristaosbackend.onrender.com/verifyAccount?token=${verificationToken}`;
+    const verificationUrl = `${process.env.VERIFICATION_URL}${verificationToken}`;
 
     // Send the email with the verification link
     await sendVerificationLink(email, verificationUrl);
@@ -76,9 +78,10 @@ router.post("/signup", async (req, res) => {
 
 // Verify Account
 // Verify Account Route
-router.get("/verifyAccount", async (req, res) => {
-  const { token } = req.query;
+router.get("/verifyAccount/:token", async (req, res) => {
+  console.log("Route for verifying account reached")
 
+  const { token } = req.params;
   console.log("Received verification request with token:", token);
 
   try {
@@ -86,6 +89,7 @@ router.get("/verifyAccount", async (req, res) => {
     const user = await User.findOne({ verificationToken: token });
 
     if (!user) {
+      console.log("User not found")
       return res.status(400).json({ message: "Token de verificação inválido ou expirado." });
     }
 

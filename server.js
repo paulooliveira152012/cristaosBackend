@@ -7,9 +7,17 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const dotenvFlow = require('dotenv-flow')
+
+
 
 // Load environment variables from .env file
 dotenv.config();
+
+dotenvFlow.config()
+
+console.log("Ambiente atual:", process.env.NODE_ENV);
+console.log("URL de verificação:", process.env.VERIFICATION_URL);
 
 // Initialize express app
 const app = express();
