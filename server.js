@@ -8,6 +8,7 @@ const socketIo = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 const dotenvFlow = require('dotenv-flow')
+const cookieParser = require("cookie-parser");
 
 
 
@@ -15,6 +16,7 @@ const dotenvFlow = require('dotenv-flow')
 // dotenv.config();
 
 dotenvFlow.config()
+
 
 console.log("Ambiente atual:", process.env.NODE_ENV);
 console.log("URL de verificação:", process.env.VERIFICATION_URL);
@@ -29,6 +31,7 @@ const server = http.createServer(app);
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3002',
+  'http://192.168.15.91:3000',
   'https://cristaosfrontend.vercel.app',          // sem hífen
   'https://cristaos-frontend.vercel.app',         // com hífen
   'https://www.cristaosfrontend.vercel.app',      // com www, se tiver
@@ -58,6 +61,7 @@ app.use(cors({
   credentials: true,
 }));
 
+app.use(cookieParser()); // <--- ESSENCIAL para ler cookies!
 
 // Use the imported routes for the API
 app.use('/api', routes);

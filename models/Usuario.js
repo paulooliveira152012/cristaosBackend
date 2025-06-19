@@ -53,6 +53,13 @@ const userSchema = new mongoose.Schema(
     resetPasswordExpires: {
       type: Date,
     },
+
+    // leader
+    leader: {
+      type: Boolean,
+      required: false,
+      default: false
+    }    
   },
   { timestamps: true }
 ); // Automatically adds `createdAt` and `updatedAt` fields
