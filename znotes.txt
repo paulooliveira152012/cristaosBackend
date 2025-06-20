@@ -1,0 +1,4 @@
+1 - remover a utilizacao de imagem em blogs onde nao tem fotos nos perfis
+2 - alinhar a foto do menu aberto com o menu fechado
+3 - certificar sempre mostre o usuario online mesmo depois de reiniciar a pagina
+4 - adicionar o link de rede nas conexoes do agora para entrar em chamadas
