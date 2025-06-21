@@ -33,6 +33,7 @@ const allowedOrigins = [
   'http://localhost:3002',
   'http://192.168.15.91:3000',
   'http://192.168.15.5:3000',
+  'http://192.168.3.11:3000',
   'https://cristaosfrontend.vercel.app',          // sem hífen
   'https://cristaos-frontend.vercel.app',         // com hífen
   'https://www.cristaosfrontend.vercel.app',      // com www, se tiver
