@@ -1,9 +1,24 @@
 // socketHandlers.js
-const { addUserToRoom, emitLiveRoomUsers } = require('./liveRoomUsers');
+const { addUserToRoom, emitLiveRoomUsers, } = require('./liveRoomUsers');
+const { addUser, removeUser, emitOnlineUsers } = require('./onlineUsers')
 
 module.exports = function (io) {
+
   io.on("connection", (socket) => {
     console.log(`New client connected: ${socket.id}`);
+
+     socket.on("userLoggedIn", (user) => {
+    if (!user || !user._id) return;
+    addUser(socket.id, user);
+    emitOnlineUsers(io);
+  });
+
+  socket.on("userLoggedOut", (user) => {
+     console.log(`User requested logout: ${user?.username}`);
+  removeUser(socket.id); // remove só este socket
+  emitOnlineUsers(io);
+});
+
 
     // Handle joining a chat room
     socket.on("joinRoom", ({ roomId, user }) => {
@@ -23,11 +38,11 @@ module.exports = function (io) {
     });
 
     // Handle disconnecting users
-    socket.on("disconnect", () => {
-      console.log(`Client disconnected: ${socket.id}`);
-      
-      // Implement user removal logic here, e.g., remove from room, notify others
-      // For this, you could implement a function in liveRoomUsers.js to remove users by socketId
-    });
+     socket.on("disconnect", () => {
+    console.log(`Client disconnected: ${socket.id}`);
+    removeUser(socket.id);
+    emitOnlineUsers(io);
+    
+  });
   });
 };
