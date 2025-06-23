@@ -1,4 +1,5 @@
 let liveRoomUsers = {}; // Object to store users by roomId
+const Room = require('../models/Room')
 
 // Before accessing liveRoomUsers[roomId], check if it needs to be initialized
 const initializeRoomIfNeeded = (roomId) => {
@@ -36,7 +37,7 @@ const addUserToRoom = (roomId, socketId, user, io) => {
 
 
 // Remove user from a specific room
-const removeUserFromRoom = (roomId, userId, io) => {
+const removeUserFromRoom = async (roomId, userId, io) => {
   if (!roomId || !io) {
     console.error("Room ID or Socket.io instance is not provided.");
     return;
@@ -49,6 +50,16 @@ const removeUserFromRoom = (roomId, userId, io) => {
 
   const initialLength = liveRoomUsers[roomId].length;
   liveRoomUsers[roomId] = liveRoomUsers[roomId].filter(user => user._id !== userId);
+
+    // Remove do banco de dados também
+  try {
+    await Room.findByIdAndUpdate(roomId, {
+      $pull: { roomMembers: { _id: userId } }
+    });
+    console.log(`Usuário ${userId} removido do banco da sala ${roomId}`);
+  } catch (err) {
+    console.error("Erro ao remover usuário do banco:", err);
+  }
 
   if (liveRoomUsers[roomId].length === 0) {
     console.log(`No users left in room ${roomId}, deleting room`);

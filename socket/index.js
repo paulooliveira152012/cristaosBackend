@@ -12,11 +12,9 @@ const {
   liveRoomUsers,
 } = require("./liveRoomUsers");
 
-
 module.exports = function (io) {
-
   // Ensure that liveRoomUsers is defined
-const liveRoomUsers = {};
+  const liveRoomUsers = {};
 
   // Function to initialize a room if it doesn't exist
   const initializeRoomIfNeeded = (roomId) => {
@@ -69,28 +67,52 @@ const liveRoomUsers = {};
       }
     });
 
+    // escutando quando microphone for ativado
+    socket.on("micStatusChanged", ({ roomId, userId, micOpen }) => {
+  const room = liveRoomUsers[roomId];
+
+  if (!room) return;
+
+  const user = room.find((u) => u._id === userId);
+
+  if (user) {
+    user.micOpen = micOpen;
+    console.log(`User ${user.username} mic status changed to ${micOpen}`);
+    emitLiveRoomUsers(io, roomId); // Atualiza os membros na sala
+  }
+});
+
+
     socket.on("minimizeRoom", ({ roomId, userId, microphoneOn }) => {
       if (!roomId || !userId) {
         emitError("Room ID and User ID are required to minimize the room.");
         return;
       }
-    
+
       // Check if the room and user exist in liveRoomUsers
-      if (!liveRoomUsers[roomId] || !liveRoomUsers[roomId].some(user => user._id === userId)) {
-        console.log(`Room with ID ${roomId} or User with ID ${userId} does not exist.`);
+      if (
+        !liveRoomUsers[roomId] ||
+        !liveRoomUsers[roomId].some((user) => user._id === userId)
+      ) {
+        console.log(
+          `Room with ID ${roomId} or User with ID ${userId} does not exist.`
+        );
         emitError("Invalid room or user ID.");
         return;
       }
-    
+
       // Mark the user as minimized
       minimizeUser(roomId, userId, true, microphoneOn, io);
-    
+
       // Emit an event to all clients in the room, including the current user, about the minimized state
-      io.in(roomId).emit("userMinimized", { userId, minimized: true, microphoneOn });
-    
+      io.in(roomId).emit("userMinimized", {
+        userId,
+        minimized: true,
+        microphoneOn,
+      });
+
       console.log(`User ${userId} has minimized the room ${roomId}.`);
     });
-    
 
     socket.on("leaveRoom", ({ roomId, userId }) => {
       if (!userId || !roomId) {
@@ -110,15 +132,14 @@ const liveRoomUsers = {};
 
     socket.on("userLoggedOut", ({ userId }) => {
       removeUser(userId);
-    
+
       Object.keys(liveRoomUsers).forEach((roomId) => {
         removeUserFromRoom(roomId, userId); // Remove from room
         emitLiveRoomUsers(io, roomId); // Update room users
       });
-    
+
       emitOnlineUsers(io); // Emit global online users
     });
-    
 
     socket.on("sendMessage", (data) => {
       const { roomId } = data;
@@ -144,15 +165,14 @@ const liveRoomUsers = {};
     socket.on("disconnect", () => {
       const user = removeUser(socket.id); // Get the user before removing
       if (user && user._id) {
-         // Remove the user from all rooms they were part of
+        // Remove the user from all rooms they were part of
         Object.keys(liveRoomUsers).forEach((roomId) => {
           removeUserFromRoom(roomId, user._id); // Remove the user from all rooms
           emitLiveRoomUsers(io, roomId); // Update room users
-          io.in(roomId).emit("userLeft", { userId: user._id });  // Notify all users that this user has left
+          io.in(roomId).emit("userLeft", { userId: user._id }); // Notify all users that this user has left
         });
       }
       emitOnlineUsers(io); // Emit global online users
     });
-    
   });
 };
