@@ -117,5 +117,63 @@ router.delete('/delete/:roomId', async (req, res) => {
   }
 });
 
+// add users to room
+router.post("/addMember", async (req, res) => {
+  const { roomId, user } = req.body;
+
+  if (!roomId || !user || !user._id) {
+    return res.status(400).json({ error: "Room ID and user data are required" });
+  }
+
+  try {
+    const room = await Room.findById(roomId);
+    if (!room) {
+      return res.status(404).json({ error: "Room not found" });
+    }
+
+    const alreadyInRoom = room.roomMembers.some((member) => member._id.toString() === user._id);
+
+    if (!alreadyInRoom) {
+      room.roomMembers.push(user);
+      await room.save();
+      return res.status(200).json({ message: "User added to room", roomMembers: room.roomMembers });
+    } else {
+      return res.status(200).json({ message: "User already in room", roomMembers: room.roomMembers });
+    }
+  } catch (error) {
+    console.error("Error adding member to room:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// remove users from room
+router.post("/removeMember", async (req, res) => {
+  const { roomId, userId } = req.body;
+
+  if (!roomId || !userId) {
+    return res.status(400).json({ error: "roomId e userId são obrigatórios." });
+  }
+
+  try {
+    const updatedRoom = await Room.findByIdAndUpdate(
+      roomId,
+      {
+        $pull: { roomMembers: { _id: userId } },
+      },
+      { new: true }
+    );
+
+    if (!updatedRoom) {
+      return res.status(404).json({ error: "Sala não encontrada." });
+    }
+
+    res.status(200).json({ success: true, room: updatedRoom });
+  } catch (error) {
+    console.error("Erro ao remover membro da sala:", error);
+    res.status(500).json({ error: "Erro interno do servidor" });
+  }
+});
+
+
 
 module.exports = router;

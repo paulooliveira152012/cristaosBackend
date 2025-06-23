@@ -10,6 +10,14 @@ const RoomSchema = new mongoose.Schema({
     username: { type: String, required: true },
     profileImage: { type: String },
   },
+    roomMembers: [
+    {
+      _id: { type: mongoose.Schema.Types.ObjectId, required: true },
+      username: { type: String, required: true },
+      profileImage: { type: String },
+    }
+  ],
+
   createdAt: { type: Date, default: Date.now },
 });
 
