@@ -1,5 +1,5 @@
 let liveRoomUsers = {}; // Object to store users by roomId
-const Room = require('../models/Room')
+const Room = require("../models/Room");
 
 // Before accessing liveRoomUsers[roomId], check if it needs to be initialized
 const initializeRoomIfNeeded = (roomId) => {
@@ -8,7 +8,6 @@ const initializeRoomIfNeeded = (roomId) => {
   }
 };
 
-
 // Add user to a specific room and emit updated room members
 const addUserToRoom = (roomId, socketId, user, io) => {
   if (!roomId || !user || !user._id) {
@@ -16,22 +15,37 @@ const addUserToRoom = (roomId, socketId, user, io) => {
     return;
   }
 
-  // Initialize the room array if it doesn't exist
+  // Inicializa array da sala se necessário
   liveRoomUsers[roomId] = liveRoomUsers[roomId] || [];
 
-  const existingUserIndex = liveRoomUsers[roomId].findIndex(u => u._id === user._id);
+  const existingUserIndex = liveRoomUsers[roomId].findIndex(
+    (u) => u._id === user._id
+  );
 
   if (existingUserIndex !== -1) {
+    // Atualiza estados e socketId se o usuário já está na sala
     const existingUser = liveRoomUsers[roomId][existingUserIndex];
-    if (existingUser.socketId !== socketId) {
-      console.log(`Updating socketId for ${user.username} in room ${roomId}`);
-      liveRoomUsers[roomId][existingUserIndex].socketId = socketId;
-    }
+
+    existingUser.socketId = socketId;
+    existingUser.micOpen = false;     // zera microfone ao voltar
+    existingUser.isSpeaker = false;   // zera speaker ao voltar
+    existingUser.minimized = false;   // volta como ativo
+
+    console.log(`🔁 User ${user.username} reentrou na sala ${roomId}`);
   } else {
-    liveRoomUsers[roomId].push({ socketId, ...user, microphoneOn: false, minimized: false });
-    console.log(`User ${user.username} added to room ${roomId}`);
+    // Usuário novo na sala
+    liveRoomUsers[roomId].push({
+      socketId,
+      ...user,
+      micOpen: false,
+      minimized: false,
+      isSpeaker: false,
+    });
+
+    console.log(`✅ User ${user.username} added to room ${roomId}`);
   }
 
+  // Emite membros atualizados
   emitLiveRoomUsers(io, roomId);
 };
 
@@ -49,12 +63,14 @@ const removeUserFromRoom = async (roomId, userId, io) => {
   }
 
   const initialLength = liveRoomUsers[roomId].length;
-  liveRoomUsers[roomId] = liveRoomUsers[roomId].filter(user => user._id !== userId);
+  liveRoomUsers[roomId] = liveRoomUsers[roomId].filter(
+    (user) => user._id !== userId
+  );
 
-    // Remove do banco de dados também
+  // Remove do banco de dados também
   try {
     await Room.findByIdAndUpdate(roomId, {
-      $pull: { roomMembers: { _id: userId } }
+      $pull: { roomMembers: { _id: userId } },
     });
     console.log(`Usuário ${userId} removido do banco da sala ${roomId}`);
   } catch (err) {
@@ -72,7 +88,6 @@ const removeUserFromRoom = async (roomId, userId, io) => {
   emitLiveRoomUsers(io, roomId);
 };
 
-
 // Emit the list of users in a room to all clients in that room
 const emitLiveRoomUsers = (io, roomId) => {
   if (!io || !roomId) {
@@ -87,20 +102,31 @@ const emitLiveRoomUsers = (io, roomId) => {
   }
 };
 
-
-
 // Toggle the microphone status of a user in the room
 const toggleMicrophone = (roomId, socketId, microphoneOn, io) => {
-  const user = liveRoomUsers[roomId]?.find(user => user.socketId === socketId);
+  const user = liveRoomUsers[roomId]?.find(
+    (user) => user.socketId === socketId
+  );
 
   if (user) {
-    user.microphoneOn = microphoneOn;
-    console.log(`User ${user.username} in room ${roomId} updated microphone status: ${microphoneOn}`);
+    user.micOpen = microphoneOn;
+    console.log(
+      `User ${user.username} in room ${roomId} updated microphone status: ${microphoneOn}`
+    );
+
+    // ✅ Atualiza também no banco de dados
+    const Room = require("../models/Room");
+    Room.updateOne(
+      { _id: roomId, "roomMembers._id": user._id },
+      { $set: { "roomMembers.$.micOpen": microphoneOn } }
+    ).catch(console.error);
+
     emitLiveRoomUsers(io, roomId);
   } else {
     console.log(`User with socketId ${socketId} not found in room ${roomId}`);
   }
 };
+
 
 // Mark a user as minimized or restored in the room
 const minimizeUser = (roomId, userId, isMinimized, microphoneOn, io) => {
@@ -111,13 +137,16 @@ const minimizeUser = (roomId, userId, isMinimized, microphoneOn, io) => {
   }
 
   // Find the user by socketId
-  const user = liveRoomUsers[roomId].find(user => user._id === userId);
+  const user = liveRoomUsers[roomId].find((user) => user._id === userId);
 
   if (user) {
     // Update the user's minimized state
     user.minimized = isMinimized;
-    user.microphoneOn = microphoneOn;
-    console.log(`User ${user.username} in room ${roomId} updated minimized state: ${isMinimized} and microphoneOn: ${microphoneOn}`);
+    user.micOpen = microphoneOn;
+
+    console.log(
+      `User ${user.username} in room ${roomId} updated minimized state: ${isMinimized} and microphoneOn: ${microphoneOn}`
+    );
 
     // Emit the updated list of users in the room
     emitLiveRoomUsers(io, roomId);
@@ -126,6 +155,39 @@ const minimizeUser = (roomId, userId, isMinimized, microphoneOn, io) => {
   }
 };
 
+const makeUserSpeaker = (roomId, userId, io) => {
+  const userList = liveRoomUsers[roomId];
+  if (!userList) return;
+
+  const user = userList.find((u) => u._id === userId);
+  if (user) {
+    user.isSpeaker = true;
+    user.micOpen = false;
+    console.log(`✅ ${user.username} agora é speaker na sala ${roomId}`);
+
+    // ✅ Atualiza também no banco
+    const Room = require("../models/Room");
+    Room.updateOne(
+      { _id: roomId, "roomMembers._id": userId },
+      {
+        $set: {
+          "roomMembers.$.isSpeaker": true,
+          "roomMembers.$.micOpen": false,
+        },
+      }
+    )
+      .then(() => {
+        console.log(`✅ MongoDB: ${user.username} agora é speaker`);
+      })
+      .catch((err) => {
+        console.error("Erro ao atualizar MongoDB:", err);
+      });
+
+    emitLiveRoomUsers(io, roomId);
+  }
+};
+
+
 
 module.exports = {
   addUserToRoom,
@@ -133,5 +195,6 @@ module.exports = {
   emitLiveRoomUsers,
   toggleMicrophone,
   minimizeUser,
-  initializeRoomIfNeeded
+  initializeRoomIfNeeded,
+  makeUserSpeaker,
 };
