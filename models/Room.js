@@ -17,6 +17,13 @@ const RoomSchema = new mongoose.Schema({
       profileImage: { type: String },
     }
   ],
+    currentUsersInRoom: [
+    {
+      _id: mongoose.Schema.Types.ObjectId,
+      username: String,
+      profileImage: String,
+    },
+  ],
 
   createdAt: { type: Date, default: Date.now },
 });
