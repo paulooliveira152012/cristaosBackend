@@ -23,6 +23,7 @@ const removeUser = (socketId) => {
 
     // If no more sockets are connected, remove the user
     if (onlineUsers[userId].socketIds.length === 0) {
+       console.log(`🔴 Usuário ${userId} desconectado completamente`);
       delete onlineUsers[userId];
     }
   }

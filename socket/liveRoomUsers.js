@@ -10,6 +10,8 @@ const initializeRoomIfNeeded = (roomId) => {
 
 // Add user to a specific room and emit updated room members
 const addUserToRoom = (roomId, socketId, user, io) => {
+  console.log("🐶 backend socket liveRoomUsers")
+
   if (!roomId || !user || !user._id) {
     console.error("Invalid roomId or user data for adding to room");
     return;
@@ -22,17 +24,20 @@ const addUserToRoom = (roomId, socketId, user, io) => {
     (u) => u._id === user._id
   );
 
-  if (existingUserIndex !== -1) {
-    // Atualiza estados e socketId se o usuário já está na sala
-    const existingUser = liveRoomUsers[roomId][existingUserIndex];
+if (existingUserIndex !== -1) {
+  const existingUser = liveRoomUsers[roomId][existingUserIndex];
 
-    existingUser.socketId = socketId;
-    existingUser.micOpen = false;     // zera microfone ao voltar
-    existingUser.isSpeaker = false;   // zera speaker ao voltar
-    existingUser.minimized = false;   // volta como ativo
+  existingUser.socketId = socketId;
 
-    console.log(`🔁 User ${user.username} reentrou na sala ${roomId}`);
-  } else {
+  // 🔁 Remova esses resets aqui
+  // existingUser.micOpen = false;
+  // existingUser.isSpeaker = false;
+
+  existingUser.minimized = false;
+
+  console.log(`🔁 User ${user.username} reentrou na sala ${roomId}`);
+}
+ else {
     // Usuário novo na sala
     liveRoomUsers[roomId].push({
       socketId,
@@ -48,7 +53,6 @@ const addUserToRoom = (roomId, socketId, user, io) => {
   // Emite membros atualizados
   emitLiveRoomUsers(io, roomId);
 };
-
 
 // Remove user from a specific room
 const removeUserFromRoom = async (roomId, userId, io) => {
@@ -90,20 +94,23 @@ const removeUserFromRoom = async (roomId, userId, io) => {
 
 // Emit the list of users in a room to all clients in that room
 const emitLiveRoomUsers = (io, roomId) => {
+  console.log("🐶 emitLiveRoomUsers");
+
   if (!io || !roomId) {
     console.error("Socket.io instance or roomId is not defined.");
     return;
   }
 
-  if (liveRoomUsers[roomId]) {
-    io.to(roomId).emit("roomData", { roomMembers: liveRoomUsers[roomId] });
-  } else {
-    io.to(roomId).emit("roomData", { roomMembers: [] });
-  }
+  const usersInRoom = liveRoomUsers[roomId] || [];
+
+  io.to(roomId).emit("liveRoomUsers", usersInRoom); // <-- nome certo
+
+  console.log(`📤 Enviando usuários da sala ${roomId}:`, usersInRoom);
 };
 
 // Toggle the microphone status of a user in the room
 const toggleMicrophone = (roomId, socketId, microphoneOn, io) => {
+  console.log("🐶 emitLiveRoomUsers")
   const user = liveRoomUsers[roomId]?.find(
     (user) => user.socketId === socketId
   );
@@ -126,7 +133,6 @@ const toggleMicrophone = (roomId, socketId, microphoneOn, io) => {
     console.log(`User with socketId ${socketId} not found in room ${roomId}`);
   }
 };
-
 
 // Mark a user as minimized or restored in the room
 const minimizeUser = (roomId, userId, isMinimized, microphoneOn, io) => {
@@ -183,11 +189,23 @@ const makeUserSpeaker = (roomId, userId, io) => {
         console.error("Erro ao atualizar MongoDB:", err);
       });
 
+    if (user._id && user.username && user.profileImage !== undefined) {
+      io.to(roomId).emit("userJoinsStage", {
+        user: {
+          _id: user._id,
+          username: user.username,
+          profileImage: user.profileImage,
+          isSpeaker: true,
+          micOpen: false,
+        },
+      });
+    } else {
+      console.warn("⚠️ Usuário incompleto ao tentar subir ao palco:", user);
+    }
+
     emitLiveRoomUsers(io, roomId);
   }
 };
-
-
 
 module.exports = {
   addUserToRoom,

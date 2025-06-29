@@ -1,4 +1,3 @@
-// socketHandlers.js
 const {
   addUserToRoom,
   removeUserFromRoom,
@@ -6,39 +5,87 @@ const {
   toggleMicrophone,
   makeUserSpeaker,
   minimizeUser,
-  initializeRoomIfNeeded,
 } = require("./liveRoomUsers");
 
 const { addUser, removeUser, emitOnlineUsers } = require("./onlineUsers");
+const Room = require("../models/Room");
 
-const roomMessages = {}; // { [roomId]: [ { userId, message, ... } ] }
+const roomMessages = {}; // { roomId: [message, message] }
 
 module.exports = function (io) {
   io.on("connection", (socket) => {
-    console.log("📥 New client connected:", socket.id);
+    console.log("📥 Novo socket conectado:", socket.id);
 
+    socket.onAny((event, args) => {
+      console.log(`📥🟢 [onAny] Evento recebido: ${event}`, args);
+    });
+
+    // 🟢 LOGIN
     socket.on("userLoggedIn", (user) => {
+      console.log("✅1");
       if (!user || !user._id) return;
       addUser(socket.id, user);
       emitOnlineUsers(io);
     });
 
+    // 🔴 LOGOUT
     socket.on("userLoggedOut", (user) => {
-      console.log("🚪 User logged out:", user?.username);
+      console.log("🚪 Usuário deslogou:", user?.username);
       removeUser(socket.id);
       emitOnlineUsers(io);
     });
 
+    // 🔌 DESCONECTAR
     socket.on("disconnect", () => {
-      console.log("❌ Socket disconnected:", socket.id);
+      console.log("❌ Socket desconectado:", socket.id);
       removeUser(socket.id);
       emitOnlineUsers(io);
     });
 
-    // entrar na sala
+    // 🎧 Usuário **entrou na sala (como ouvinte)**
+    socket.on("userJoinsRoom", async ({ roomId, user }) => {
+      console.log("🐶 usuario entrou na sala");
+      try {
+        const room = await Room.findById(roomId);
+        if (!room) return;
+
+        const alreadyIn = room.currentUsersInRoom.some(
+          (u) => u._id.toString() === user._id
+        );
+
+        if (!alreadyIn) {
+          room.currentUsersInRoom.push(user);
+          await room.save();
+        }
+
+        io.to(roomId).emit("currentUsersInRoom", room.currentUsersInRoom);
+      } catch (err) {
+        console.error("❌ Erro ao adicionar usuário à sala:", err);
+      }
+    });
+
+    // 🧼 Usuário **saiu da sala**
+    socket.on("userLeavesRoom", async ({ roomId, userId }) => {
+      try {
+        const room = await Room.findById(roomId);
+        if (!room) return;
+
+        room.currentUsersInRoom = room.currentUsersInRoom.filter(
+          (u) => u._id.toString() !== userId
+        );
+        await room.save();
+
+        io.to(roomId).emit("currentUsersInRoom", room.currentUsersInRoom);
+      } catch (err) {
+        console.error("❌ Erro ao remover usuário da sala:", err);
+      }
+    });
+
+    // 🫂 Usuário entrou oficialmente na sala (joinRoom)
     socket.on("joinRoom", ({ roomId, user }) => {
+      console.log("✅1");
       if (!roomId || !user) {
-        console.error("❌ joinRoom: Missing roomId or user");
+        console.error("❌ joinRoom: dados ausentes");
         return;
       }
 
@@ -46,16 +93,14 @@ module.exports = function (io) {
       addUserToRoom(roomId, socket.id, user, io);
       emitLiveRoomUsers(io, roomId);
 
-      // 👇 Chat automático ao entrar
+      // Carrega mensagens antigas do chat
       roomMessages[roomId] = roomMessages[roomId] || [];
-      console.log(
-        `💬 ${user?.username} também entrou no chat da sala ${roomId}`
-      );
+      console.log(`💬 ${user?.username} entrou no chat da sala ${roomId}`);
       socket.emit("chatHistory", roomMessages[roomId]);
     });
 
-    // mandar mensagem
-    socket.on("sendMessage", (message) => {
+    // 📝 Enviar mensagem
+    socket.on("sendMessage", (msg) => {
       const {
         roomId,
         userId,
@@ -63,27 +108,26 @@ module.exports = function (io) {
         profileImage,
         message: text,
         timestamp,
-      } = message;
+      } = msg;
       if (!roomId || !text?.trim()) return;
 
       const newMessage = {
-        _id: Date.now().toString(), // ou use uuid se quiser
+        _id: Date.now().toString(),
+        roomId,
         userId,
         username,
         profileImage,
         message: text,
-        roomId,
         timestamp: timestamp || new Date(),
       };
 
       roomMessages[roomId] = roomMessages[roomId] || [];
       roomMessages[roomId].push(newMessage);
 
-      // Envia para todos na sala
       io.to(roomId).emit("receiveMessage", newMessage);
     });
 
-    // deletar mensagem
+    // 🗑 Deletar mensagem
     socket.on("deleteMessage", ({ messageId, userId, roomId }) => {
       if (!roomId || !messageId || !userId) return;
 
@@ -94,25 +138,29 @@ module.exports = function (io) {
       io.to(roomId).emit("messageDeleted", messageId);
     });
 
-    // sair da sala
+    // 🚪 Sair do chat (apenas visualmente)
     socket.on("leaveRoomChat", ({ roomId }) => {
       socket.leave(roomId);
-      console.log(`🚪 Usuário saiu do chat da sala ${roomId}`);
+      console.log(`👋 Saiu do chat da sala ${roomId}`);
     });
 
-    socket.on("joinAsSpeaker", ({ roomId, userId }) => {
-      console.log(`🔊 Usuário ${userId} subiu ao palco na sala ${roomId}`);
-      makeUserSpeaker(roomId, userId, io); // ✅ Atualiza isSpeaker no backend
+    // 🎤 Subir ao palco
+    socket.on("joinAsSpeaker", ({ roomId, user }) => {
+      console.log(`🔊 ${user?.username} subiu ao palco na sala ${roomId}`);
+      makeUserSpeaker(roomId, user._id, io); // <- Verifica se essa função emite o evento corretamente
     });
 
+    // 🎙️ Ativar/desativar microfone
     socket.on("toggleMicrophone", ({ roomId, socketId, microphoneOn }) => {
       toggleMicrophone(roomId, socketId, microphoneOn, io);
     });
 
+    // ⬇️ Minimizar sala
     socket.on("minimizeRoom", ({ roomId, userId, microphoneOn }) => {
       minimizeUser(roomId, userId, microphoneOn, io);
     });
 
+    // 🚫 Deixar a sala completamente
     socket.on("leaveRoom", ({ roomId, userId }) => {
       removeUserFromRoom(roomId, userId, io);
       emitLiveRoomUsers(io, roomId);
