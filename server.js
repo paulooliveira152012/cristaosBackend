@@ -50,7 +50,10 @@ const io = socketIo(server, {
 
 
 // Import the Socket.IO handling logic from socket/index.js
-require('./socket')(io); // Assuming you handle your socket logic in `socket/index.js`
+// require('./socket')(io); // Assuming you handle your socket logic in `socket/index.js`
+require('./socket/socketHandlers')(io);
+
+
 
 // Middleware to parse JSON and handle CORS
 app.use(express.json());

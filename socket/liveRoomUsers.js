@@ -162,6 +162,7 @@ const minimizeUser = (roomId, userId, isMinimized, microphoneOn, io) => {
 };
 
 const makeUserSpeaker = (roomId, userId, io) => {
+  console.log("🤑 1 - makeUserSpeaker socket/liveRoomUsers.js/makeUserSpeaker")
   const userList = liveRoomUsers[roomId];
   if (!userList) return;
 

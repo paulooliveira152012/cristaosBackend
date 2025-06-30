@@ -1,3 +1,5 @@
+// socket/socketHandlers.js
+
 const {
   addUserToRoom,
   removeUserFromRoom,
@@ -5,12 +7,20 @@ const {
   toggleMicrophone,
   makeUserSpeaker,
   minimizeUser,
+  liveRoomUsers, // importante para acesso direto
 } = require("./liveRoomUsers");
 
 const { addUser, removeUser, emitOnlineUsers } = require("./onlineUsers");
+const {
+  emitChatHistory,
+  handleSendMessage,
+  handleDeleteMessage,
+} = require("./chatMessages");
+
 const Room = require("../models/Room");
 
-const roomMessages = {}; // { roomId: [message, message] }
+const roomMessages = {}; // Chat local na RAM
+const roomSpeakers = {}; // Palco local na RAM
 
 module.exports = function (io) {
   io.on("connection", (socket) => {
@@ -20,31 +30,51 @@ module.exports = function (io) {
       console.log(`📥🟢 [onAny] Evento recebido: ${event}`, args);
     });
 
-    // 🟢 LOGIN
+    // 🔐 LOGIN
     socket.on("userLoggedIn", (user) => {
-      console.log("✅1");
       if (!user || !user._id) return;
       addUser(socket.id, user);
       emitOnlineUsers(io);
     });
 
-    // 🔴 LOGOUT
-    socket.on("userLoggedOut", (user) => {
-      console.log("🚪 Usuário deslogou:", user?.username);
+    // 🔓 LOGOUT
+    socket.on("userLoggedOut", ({ userId }) => {
       removeUser(socket.id);
+
+      // Remover de todas as salas
+      Object.keys(liveRoomUsers).forEach((roomId) => {
+        removeUserFromRoom(roomId, userId);
+        emitLiveRoomUsers(io, roomId);
+        io.in(roomId).emit("userLeft", { userId });
+      });
+
       emitOnlineUsers(io);
     });
 
     // 🔌 DESCONECTAR
     socket.on("disconnect", () => {
       console.log("❌ Socket desconectado:", socket.id);
-      removeUser(socket.id);
+      const user = removeUser(socket.id);
+
+      Object.keys(roomSpeakers).forEach((roomId) => {
+        roomSpeakers[roomId] = roomSpeakers[roomId].filter(
+          (u) => u.socketId !== socket.id
+        );
+        io.to(roomId).emit("updateSpeakers", roomSpeakers[roomId]);
+      });
+
+      if (user && user._id) {
+        Object.keys(liveRoomUsers).forEach((roomId) => {
+          removeUserFromRoom(roomId, user._id);
+          emitLiveRoomUsers(io, roomId);
+          io.in(roomId).emit("userLeft", { userId: user._id });
+        });
+      }
       emitOnlineUsers(io);
     });
 
-    // 🎧 Usuário **entrou na sala (como ouvinte)**
+    // 🎧 Entrar como ouvinte (visualmente)
     socket.on("userJoinsRoom", async ({ roomId, user }) => {
-      console.log("🐶 usuario entrou na sala");
       try {
         const room = await Room.findById(roomId);
         if (!room) return;
@@ -60,11 +90,11 @@ module.exports = function (io) {
 
         io.to(roomId).emit("currentUsersInRoom", room.currentUsersInRoom);
       } catch (err) {
-        console.error("❌ Erro ao adicionar usuário à sala:", err);
+        console.error("❌ Erro ao adicionar ouvinte à sala:", err);
       }
     });
 
-    // 🧼 Usuário **saiu da sala**
+    // 🧼 Sair da sala como ouvinte
     socket.on("userLeavesRoom", async ({ roomId, userId }) => {
       try {
         const room = await Room.findById(roomId);
@@ -77,54 +107,40 @@ module.exports = function (io) {
 
         io.to(roomId).emit("currentUsersInRoom", room.currentUsersInRoom);
       } catch (err) {
-        console.error("❌ Erro ao remover usuário da sala:", err);
+        console.error("❌ Erro ao remover ouvinte da sala:", err);
       }
     });
 
-    // 🫂 Usuário entrou oficialmente na sala (joinRoom)
-    socket.on("joinRoom", ({ roomId, user }) => {
-      console.log("✅1");
-      if (!roomId || !user) {
-        console.error("❌ joinRoom: dados ausentes");
-        return;
-      }
+    // 🫂 Join oficial à sala (como membro)
+    socket.on("joinRoom", async ({ roomId, user }) => {
+      if (!user || !roomId) return;
 
-      socket.join(roomId);
+      await socket.join(roomId);
       addUserToRoom(roomId, socket.id, user, io);
       emitLiveRoomUsers(io, roomId);
 
-      // Carrega mensagens antigas do chat
       roomMessages[roomId] = roomMessages[roomId] || [];
-      console.log(`💬 ${user?.username} entrou no chat da sala ${roomId}`);
       socket.emit("chatHistory", roomMessages[roomId]);
     });
 
     // 📝 Enviar mensagem
     socket.on("sendMessage", (msg) => {
-      const {
-        roomId,
-        userId,
-        username,
-        profileImage,
-        message: text,
-        timestamp,
-      } = msg;
+      const { roomId, userId, username, profileImage, message: text } = msg;
       if (!roomId || !text?.trim()) return;
 
-      const newMessage = {
+      const newMsg = {
         _id: Date.now().toString(),
         roomId,
         userId,
         username,
         profileImage,
         message: text,
-        timestamp: timestamp || new Date(),
+        timestamp: new Date(),
       };
 
       roomMessages[roomId] = roomMessages[roomId] || [];
-      roomMessages[roomId].push(newMessage);
-
-      io.to(roomId).emit("receiveMessage", newMessage);
+      roomMessages[roomId].push(newMsg);
+      io.to(roomId).emit("receiveMessage", newMsg);
     });
 
     // 🗑 Deletar mensagem
@@ -138,19 +154,19 @@ module.exports = function (io) {
       io.to(roomId).emit("messageDeleted", messageId);
     });
 
-    // 🚪 Sair do chat (apenas visualmente)
-    socket.on("leaveRoomChat", ({ roomId }) => {
-      socket.leave(roomId);
-      console.log(`👋 Saiu do chat da sala ${roomId}`);
-    });
-
     // 🎤 Subir ao palco
     socket.on("joinAsSpeaker", ({ roomId, user }) => {
-      console.log(`🔊 ${user?.username} subiu ao palco na sala ${roomId}`);
-      makeUserSpeaker(roomId, user._id, io); // <- Verifica se essa função emite o evento corretamente
+      if (!roomId || !user) return;
+      if (!roomSpeakers[roomId]) roomSpeakers[roomId] = [];
+
+      const alreadyIn = roomSpeakers[roomId].some((u) => u._id === user._id);
+      if (!alreadyIn) roomSpeakers[roomId].push(user);
+
+      io.to(roomId).emit("updateSpeakers", roomSpeakers[roomId]);
+      makeUserSpeaker(roomId, user._id, io);
     });
 
-    // 🎙️ Ativar/desativar microfone
+    // 🎙️ Ativar/desativar mic
     socket.on("toggleMicrophone", ({ roomId, socketId, microphoneOn }) => {
       toggleMicrophone(roomId, socketId, microphoneOn, io);
     });
@@ -160,10 +176,12 @@ module.exports = function (io) {
       minimizeUser(roomId, userId, microphoneOn, io);
     });
 
-    // 🚫 Deixar a sala completamente
+    // 🚪 Sair da sala
     socket.on("leaveRoom", ({ roomId, userId }) => {
-      removeUserFromRoom(roomId, userId, io);
+      removeUserFromRoom(roomId, userId);
       emitLiveRoomUsers(io, roomId);
+      io.in(roomId).emit("userLeft", { userId });
+      socket.leave(roomId);
     });
   });
 };
