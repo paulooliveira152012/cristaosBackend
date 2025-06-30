@@ -49,6 +49,8 @@ const io = socketIo(server, {
 });
 
 
+// .index.js e socketHandlers.js sao necessarios... preciso juntar ambos em um so!
+
 // Import the Socket.IO handling logic from socket/index.js
 // require('./socket')(io); // Assuming you handle your socket logic in `socket/index.js`
 require('./socket/socketHandlers')(io);
