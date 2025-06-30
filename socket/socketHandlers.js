@@ -10,7 +10,11 @@ const {
   liveRoomUsers, // importante para acesso direto
 } = require("./liveRoomUsers");
 
-const { addUser, removeUser, emitOnlineUsers } = require("./onlineUsers");
+const { 
+  addUser, 
+  removeUser, 
+  emitOnlineUsers 
+} = require("./onlineUsers");
 const {
   emitChatHistory,
   handleSendMessage,
@@ -50,6 +54,9 @@ module.exports = function (io) {
 
       emitOnlineUsers(io);
     });
+
+
+
 
     // 🔌 DESCONECTAR
     socket.on("disconnect", () => {
@@ -170,6 +177,7 @@ module.exports = function (io) {
     socket.on("toggleMicrophone", ({ roomId, socketId, microphoneOn }) => {
       toggleMicrophone(roomId, socketId, microphoneOn, io);
     });
+
 
     // ⬇️ Minimizar sala
     socket.on("minimizeRoom", ({ roomId, userId, microphoneOn }) => {

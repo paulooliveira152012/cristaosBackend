@@ -1,4 +1,13 @@
 ✅ 1 - remover a utilizacao de imagem em blogs onde nao tem fotos nos perfis
 ✅ 2 - alinhar a foto do menu aberto com o menu fechado
 ✅ 3 - certificar sempre mostre o usuario online mesmo depois de reiniciar a pagina
-4 - remover usuarios da sala quando clica no x ou fechar a aba
+✅ 4 - remover usuarios da sala quando clica no x ou fechar a aba
+
+5 - atualizar todas as abas com o usuario que saiu.
+6 - se um usuario sai da sala, e volta, ja nao mostra mais os usuarios no palco
+
+
+
+
+
+
