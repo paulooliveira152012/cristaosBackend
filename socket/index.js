@@ -17,6 +17,7 @@ const {
 } = require("./liveRoomUsers");
 
 const Room = require("../models/Room");
+const User = require("../models/Usuario")
 
 // wrapper para iniciar socket
 module.exports = function (io) {
@@ -44,9 +45,9 @@ module.exports = function (io) {
     };
 
     // ... para cada evento que acontecer...
-    socket.onAny((event, args) => {
-      console.log(`📥🟢 [onAny] Evento recebido: ${event}`, args);
-    });
+    // socket.onAny((event, args) => {
+    //   console.log(`📥🟢 [onAny] Evento recebido: ${event}`, args);
+    // });
 
     // 2 - Definimos os eventos que esse socket (usuário) poderá emitir durante a sessão
 
@@ -56,6 +57,7 @@ module.exports = function (io) {
         emitError("Invalid user data received for login.");
         return;
       }
+      console.log("user:", user);
       addUser(socket.id, user);
       emitOnlineUsers(io);
     });
@@ -82,6 +84,13 @@ module.exports = function (io) {
       try {
         await socket.join(roomId);
         addUserToRoom(roomId, user._id, user, io);
+
+        // ✅ NOVO: Emitir lista de oradores ao usuário que entrou
+        const room = await Room.findById(roomId);
+        if (room?.currentUsersSpeaking?.length) {
+          socket.emit("updateSpeakers", room.currentUsersSpeaking);
+        }
+
         emitLiveRoomUsers(io, roomId);
         emitChatHistory(socket, roomId);
         socket.emit("successMessage", `Joined room ${roomId} successfully.`);
@@ -91,32 +100,65 @@ module.exports = function (io) {
     });
 
     // 2.d subir usuario para quem esta falando
-      // 🎤 Subir ao palco
-    socket.on("joinAsSpeaker", ({ roomId, user }) => {
-      if (!roomId || !user) return;
-      if (!roomSpeakers[roomId]) roomSpeakers[roomId] = [];
+    // 🎤 Subir ao palco
+// 🎤 Subir ao palco
+socket.on("joinAsSpeaker", async ({ roomId, userId }) => {
+  console.log("socket joinAsSpeaker alcançada...");
 
-      const alreadyIn = roomSpeakers[roomId].some((u) => u._id === user._id);
-      if (!alreadyIn) roomSpeakers[roomId].push(user);
+  if (!roomId || !userId) return;
 
-      io.to(roomId).emit("updateSpeakers", roomSpeakers[roomId]);
-      makeUserSpeaker(roomId, user._id, io);
-    });
+  try {
+    const user = await User.findById(userId).select("_id username profileImage");
+    if (!user) {
+      console.warn("Usuário não encontrado para subir ao palco.");
+      return;
+    }
+
+    if (!liveRoomUsers[roomId]) {
+      liveRoomUsers[roomId] = { speakers: [] };
+    } else if (!Array.isArray(liveRoomUsers[roomId].speakers)) {
+      liveRoomUsers[roomId].speakers = [];
+    }
+
+    const alreadySpeaker = liveRoomUsers[roomId].speakers.some(
+      (u) => u._id.toString() === userId
+    );
+
+    if (!alreadySpeaker) {
+      liveRoomUsers[roomId].speakers.push({
+        _id: user._id.toString(),
+        username: user.username,
+        profileImage: user.profileImage,
+        micOpen: false, // começa com mic desligado
+      });
+      console.log(`✅ ${user.username} subiu ao palco na sala ${roomId}`);
+    } else {
+      console.log(`ℹ️ ${user.username} já está no palco.`);
+    }
+
+    io.to(roomId).emit("updateSpeakers", liveRoomUsers[roomId].speakers);
+
+  } catch (err) {
+    console.error("❌ Erro ao processar joinAsSpeaker:", err);
+  }
+});
+
 
     // 2.e escutando quando microphone for ativado
-    socket.on("micStatusChanged", ({ roomId, userId, micOpen }) => {
-      const room = liveRoomUsers[roomId];
+socket.on("micStatusChanged", ({ roomId, userId, micOpen }) => {
+  const room = liveRoomUsers[roomId];
 
-      if (!room) return;
+  if (!room || !Array.isArray(room.speakers)) return;
 
-      const user = room.find((u) => u._id === userId);
+  const user = room.speakers.find((u) => u._id === userId);
 
-      if (user) {
-        user.micOpen = micOpen;
-        console.log(`User ${user.username} mic status changed to ${micOpen}`);
-        emitLiveRoomUsers(io, roomId); // Atualiza os membros na sala
-      }
-    });
+  if (user) {
+    user.micOpen = micOpen;
+    console.log(`🎙️ Mic do usuário ${user.username} agora está ${micOpen}`);
+    io.to(roomId).emit("updateSpeakers", room.speakers);
+  }
+});
+
 
     // 🎙️ Ativar/desativar mic
     socket.on("toggleMicrophone", ({ roomId, socketId, microphoneOn }) => {
@@ -155,26 +197,94 @@ module.exports = function (io) {
       console.log(`User ${userId} has minimized the room ${roomId}.`);
     });
 
-
     // 2.g sair da sala
-        // 🧼 Sair da sala como ouvinte
-        socket.on("userLeavesRoom", async ({ roomId, userId }) => {
-          console.log("usuario saindo da sala")
-          try {
-            const room = await Room.findById(roomId);
-            if (!room) return;
-    
-            room.currentUsersInRoom = room.currentUsersInRoom.filter(
-              (u) => u._id.toString() !== userId
-            );
-            await room.save();
-    
-            io.to(roomId).emit("currentUsersInRoom", room.currentUsersInRoom);
-          } catch (err) {
-            console.error("❌ Erro ao remover ouvinte da sala:", err);
-          }
-        });
+    // 🧼 Sair da sala como ouvinte
+    socket.on("userLeavesRoom", async ({ roomId, userId }) => {
+      console.log("usuario saindo da sala");
 
+      console.log("usuario:", userId)
+      console.log("saindo da sala:", roomId)
+
+      console.log("liveRoomUsers:", liveRoomUsers)
+
+
+      if (!liveRoomUsers[roomId]) {
+        liveRoomUsers[roomId] = { speakers: [] }; // garante que não seja undefined
+      }
+
+      try {
+        const room = await Room.findById(roomId);
+
+        console.log("room antes:", room)
+        if (!room) return;
+
+        console.log("sala antes de remover o usuario", room.currentUsersInRoom)
+
+        // 1️⃣ Remover do currentUsersInRoom do MongoDB
+        room.currentUsersInRoom = room.currentUsersInRoom.filter(
+          (u) => u._id.toString() !== userId
+        );
+
+        console.log("sala depois de remover o usuario dos 'na sala'", room.currentUsersInRoom)
+
+        await room.save();
+
+        console.log("usuario removido dos 'na sala'")
+        
+        console.log("removendo agora dos 'falando' se estiva falando...")
+
+        // 2️⃣ Remover da lista de oradores (liveRoomUsers.speakers)
+
+        console.log("room: depois", room)
+
+        console.log("✅ falentes na sala antes de sair:", liveRoomUsers[roomId].speakers)
+
+        if (liveRoomUsers[roomId]?.speakers) {
+          console.log("✅ Havia oradores! buscando o usuario para remover...")
+          const prevLength = liveRoomUsers[roomId].speakers.length;
+          console.log("usuarios antes de remover alguem:", prevLength)
+          console.log("agora removendo o usuario se ele estiver la...")
+          liveRoomUsers[roomId].speakers = liveRoomUsers[
+            roomId
+          ].speakers.filter((u) => u._id !== userId);
+          const afterLength = liveRoomUsers[roomId].speakers.length;
+          console.log("agora a lista e:", afterLength)
+
+          if (prevLength !== afterLength) {
+            console.log("🎙️ Removido dos oradores:", userId);
+            io.to(roomId).emit(
+              "updateSpeakers",
+              liveRoomUsers[roomId].speakers
+            );
+          }
+        }
+
+        console.log("liveRoomUsers atualizado", liveRoomUsers[roomId]);
+        console.log("liveRoomUsers atualizado", liveRoomUsers[roomId].speakers);
+
+        // 3️⃣ Emitir nova lista de ouvintes
+        // console.log(
+        //   "emitindo lista de usuarios na sala atualizada",
+        //   room.currentUsersInRoom
+        // );
+        // io.to(roomId).emit("liveRoomUsers", room.currentUsersInRoom);
+
+        // já emitido acima se houve alteração nos speakers, não emitir de novo
+
+
+        console.log(
+          "emitindo lista de oradores na sala atualizada",
+          liveRoomUsers[roomId].speakers
+        );
+        io.to(roomId).emit("updateSpeakers", liveRoomUsers[roomId].speakers);
+
+        console.log("✅✅✅✅✅✅✅✅ Speaker removido do banco de dados e via socket")
+
+        // io.to(roomId).emit("liveRoomUsers", room.currentUsersInRoom); //tiro esse?
+      } catch (err) {
+        console.error("❌ Erro ao remover ouvinte da sala:", err);
+      }
+    });
 
     // 2.h sair da sala
     socket.on("leaveRoom", ({ roomId, userId }) => {
@@ -202,7 +312,6 @@ module.exports = function (io) {
       });
       emitOnlineUsers(io); // Emit global online users
     });
-
 
     // 2.i mandar mensagem
     socket.on("sendMessage", (data) => {
