@@ -25,6 +25,14 @@ const RoomSchema = new mongoose.Schema({
     },
   ],
 
+  currentUsersSpeaking: [
+    {
+      _id: mongoose.Schema.Types.ObjectId,
+      username: String,
+      profileImage: String,
+    }
+  ],
+
   createdAt: { type: Date, default: Date.now },
 });
 

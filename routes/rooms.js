@@ -233,6 +233,73 @@ router.post("/removeCurrentUser", async (req, res) => {
   }
 });
 
+
+// 🔊 Adicionar um usuário aos oradores da sala
+router.post("/addSpeakerToRoom", async (req, res) => {
+  console.log("rota para adicionar speaker")
+  const { roomId, user } = req.body;
+
+  if (!roomId || !user || !user._id) {
+    return res.status(400).json({ error: "Room ID e dados do usuário são obrigatórios." });
+  }
+
+  try {
+    // Evita duplicatas com $addToSet
+    const updatedRoom = await Room.findByIdAndUpdate(
+      roomId,
+      { $addToSet: { currentUsersSpeaking: user } },
+      { new: true }
+    );
+
+    if (!updatedRoom) {
+      return res.status(404).json({ error: "Sala não encontrada." });
+    }
+
+    return res.status(200).json({
+      message: "Usuário adicionado à lista de oradores com sucesso.",
+      currentUsersSpeaking: updatedRoom.currentUsersSpeaking,
+    });
+  } catch (error) {
+    console.error("Erro ao adicionar orador:", error);
+    return res.status(500).json({ error: "Erro ao adicionar orador à sala." });
+  }
+});
+
+// remover speaker
+router.post("/removeSpeakerFromRoom", async (req, res) => {
+  console.log("✅✅✅ rota para remover speaker")
+  const { roomId, userId } = req.body;
+
+  if (!roomId || !userId) {
+    return res.status(400).json({ error: "Room ID e User ID são obrigatórios." });
+  }
+
+  try {
+    const updatedRoom = await Room.findByIdAndUpdate(
+      roomId,
+      { $pull: { currentUsersSpeaking: { _id: userId } } },
+      { new: true }
+    );
+    
+
+    console.log(`✅ Usuario ${userId} removido dos falantes da sala ${roomId} `)
+
+    if (!updatedRoom) {
+      return res.status(404).json({ error: "Sala não encontrada." });
+    }
+
+    return res.status(200).json({
+      message: "Usuário removido da lista de oradores com sucesso.",
+      currentUsersSpeaking: updatedRoom.currentUsersSpeaking,
+    });
+  } catch (error) {
+    console.error("Erro ao remover orador:", error);
+    return res.status(500).json({ error: "Erro ao remover orador da sala." });
+  }
+});
+
+
+
 // add users to room
 router.post("/addMember", async (req, res) => {
   const { roomId, user } = req.body;
