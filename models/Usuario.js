@@ -44,7 +44,7 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false, // New users are not verified by default
     },
-    
+
     // Add reset password token and expiration fields
     resetPasswordToken: {
       type: String,
@@ -58,8 +58,22 @@ const userSchema = new mongoose.Schema(
     leader: {
       type: Boolean,
       required: false,
-      default: false
-    }    
+      default: false,
+    },
+
+    // friend requests
+    friendRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // recebidos
+
+    // sent friend requests
+    sentFriendRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // enviados
+
+    // friends
+    friends: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   { timestamps: true }
 ); // Automatically adds `createdAt` and `updatedAt` fields
