@@ -282,13 +282,15 @@ router.delete("/:commentId/:parentCommentId?", async (req, res) => {
 
   const { commentId, parentCommentId } = req.params;
 
+  console.log(`commentId = ${commentId}, parentCommentId = ${parentCommentId}`)
+
   try {
     if (!parentCommentId) {
       // This is a top-level comment deletion
       console.log("Deleting parent comment:", commentId);
 
       // find the listing pertaining to the comment
-      const listing = await Listing.findOne({ "comments.id": commentId })
+      const listing = await Listing.findOne({ "comments._id": commentId })
 
       if (!listing) {
         console.log("listing with this comment not found")

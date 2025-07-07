@@ -119,7 +119,6 @@ module.exports = function (io) {
 
     // 2.d subir usuario para quem esta falando
     // 🎤 Subir ao palco
-    // 🎤 Subir ao palco
     socket.on("joinAsSpeaker", async ({ roomId, userId }) => {
       console.log("socket joinAsSpeaker alcançada...");
 
