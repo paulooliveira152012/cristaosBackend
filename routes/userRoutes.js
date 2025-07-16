@@ -171,6 +171,8 @@ router.post("/signout", (req, res) => {
 
 // Delete User Account
 router.delete("/delete-account/:id", async (req, res) => {
+  console.log("rota para deletar conta alcançada")
+  
   const { id } = req.params;
   try {
     if (!mongoose.Types.ObjectId.isValid(id))
@@ -318,7 +320,7 @@ router.put("/update/:id", async (req, res) => {
     }
 
     const updatedUser = await User.findByIdAndUpdate(id, { $set: updates }, { new: true });
-    
+
     console.log("atualizado!")
 
     res.status(200).json({ message: "Usuário atualizado com sucesso", user: updatedUser });
