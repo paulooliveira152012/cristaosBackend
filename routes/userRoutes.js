@@ -8,10 +8,12 @@ const {
 } = require("../utils/emailService");
 const mongoose = require("mongoose");
 const User = require("../models/Usuario");
+const Notification = require("../models/Notification");
 const { protect } = require("../utils/auth");
 const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
+const { createNotification } = require("../utils/notificationUtils")
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -141,6 +143,8 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
+
+    console.log("token JWT:", token);
 
     // Enviar o token como cookie
     res.cookie("token", token, {
@@ -279,32 +283,35 @@ router.put("/resetPassword", async (req, res) => {
   }
 });
 
-// send friend request:
+// Send friend request
 router.post("/friendRequest/:friendId", protect, async (req, res) => {
-  console.log("rota de enviar pedido de amizade alcançada")
+  console.log("🔹 Enviando pedido de amizade");
+
   const userId = req.user._id;
   const { friendId } = req.params;
 
-  if (userId.toString() === friendId)
-    return res
-      .status(400)
-      .json({ error: "Você não pode se adicionar como amigo." });
+  if (userId.toString() === friendId) {
+    return res.status(400).json({ error: "Você não pode se adicionar como amigo." });
+  }
 
   const user = await User.findById(userId);
   const friend = await User.findById(friendId);
 
-  if (!friend)
+  if (!friend) {
     return res.status(404).json({ error: "Usuário não encontrado." });
-
-  if (
-    user.friends.includes(friendId) ||
-    user.sentFriendRequests.includes(friendId) ||
-    friend.friendRequests.includes(userId)
-  ) {
-    return res
-      .status(400)
-      .json({ error: "Pedido já enviado ou usuário já é seu amigo." });
   }
+
+  const alreadyFriends = user.friends.includes(friendId);
+  const alreadySent = user.sentFriendRequests.includes(friendId);
+  const alreadyReceived = friend.friendRequests.includes(userId);
+
+  if (alreadyFriends || alreadySent || alreadyReceived) {
+    return res.status(400).json({ error: "Pedido já enviado ou usuário já é seu amigo." });
+  }
+
+  // Inicializa arrays caso venham undefined
+  user.sentFriendRequests = user.sentFriendRequests || [];
+  friend.friendRequests = friend.friendRequests || [];
 
   user.sentFriendRequests.push(friendId);
   friend.friendRequests.push(userId);
@@ -312,8 +319,16 @@ router.post("/friendRequest/:friendId", protect, async (req, res) => {
   await user.save();
   await friend.save();
 
-  return res.status(200).json({ message: "Pedido de amizade enviado." });
+  await createNotification({
+    type: "friend_request",
+    recipient: friendId,
+    fromUser: userId,
+    content: `${user.username} te enviou um pedido de amizade.`,
+  });
+
+  return res.status(200).json({ message: "Pedido de amizade enviado com sucesso." });
 });
+
 
 // accept friend request:
 router.post("/acceptFriend/:requesterId", protect, async (req, res) => {
@@ -344,6 +359,21 @@ router.post("/acceptFriend/:requesterId", protect, async (req, res) => {
   await user.save();
   await requester.save();
 
+  // 🧹 Remover notificações antigas de friend_request
+  await Notification.deleteMany({
+    type: "friend_request",
+    fromUser: requesterId,
+    recipient: userId,
+  });
+
+  // (Opcional) Criar uma notificação de aceitação
+  await Notification.create({
+    type: "friend_request_accepted",
+    fromUser: userId,
+    recipient: requesterId,
+    content: `${user.username} aceitou seu pedido de amizade.`,
+  });
+
   return res.status(200).json({ message: "Pedido de amizade aceito." });
 });
 
@@ -372,8 +402,16 @@ router.post("/rejectFriend/:requesterId", protect, async (req, res) => {
   await user.save();
   await requester.save();
 
+  // 🧹 Remover notificações antigas de friend_request
+  await Notification.deleteMany({
+    type: "friend_request",
+    fromUser: requesterId,
+    recipient: userId,
+  });
+
   return res.status(200).json({ message: "Pedido de amizade recusado." });
 });
+
 
 // lista de pedidos pendentes
 router.get("/friendRequests", protect, async (req, res) => {
@@ -388,38 +426,47 @@ router.get("/friendRequests", protect, async (req, res) => {
 
 // 🔹 Remove friend
 router.post("/removeFriend/:friendId", protect, async (req, res) => {
-  console.log("🔹 route for removing a friend");
-  try {
-    const { friendId } = req.params;
-    const userId = req.user._id;
+  const userId = req.user._id;
+  const { friendId } = req.params;
 
+  try {
     const user = await User.findById(userId);
+    const friend = await User.findById(friendId);
 
     user.friends = user.friends.filter((id) => id.toString() !== friendId);
-    await user.save();
+    friend.friends = friend.friends.filter((id) => id.toString() !== userId.toString());
 
-    return res
-      .status(200)
-      .json({ message: "Amigo removido com sucesso.", user });
+    await user.save();
+    await friend.save();
+
+    return res.status(200).json({ message: "Amigo removido com sucesso." });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
 });
 
-// 🔹 Get friends list
-router.get("/friends", async (req, res) => {
-  console.log("🔹 route for getting list of friends");
-  try {
-    const userId = req.user._id;
 
-    const user = await User.findById(userId).populate(
+// 🔹 Get friends list
+// 🔹 Buscar amigos de qualquer usuário pelo ID
+router.get("/:userId/friends", async (req, res) => {
+  console.log("🔹 Rota GET /:userId/friends acessada");
+
+  try {
+    const user = await User.findById(req.params.userId).populate(
       "friends",
       "username profileImage"
     );
+
+    if (!user) {
+      return res.status(404).json({ error: "Usuário não encontrado" });
+    }
+
     return res.status(200).json({ friends: user.friends });
   } catch (error) {
+    console.error("Erro ao buscar amigos:", error);
     return res.status(500).json({ error: error.message });
   }
 });
+
 
 module.exports = router;

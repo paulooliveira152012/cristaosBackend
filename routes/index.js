@@ -6,10 +6,12 @@ const pollRoutes = require('./pollRoutes');
 const rooms = require('./rooms')
 const adminRoutes = require('./adminRoutes')
 const uploadImageRoute = require('./upload-url'); 
+const notifications = require('./notifications')
 
 const router = express.Router();
 
 router.use('/users', userRoutes); // o nome da colecao que aparece no banco de dados (users)
+router.use('/notifications', notifications)
 router.use('/listings', listingRoutes);
 router.use('/comments', commentRoutes);
 router.use('/polls', pollRoutes);
