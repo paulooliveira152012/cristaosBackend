@@ -9,11 +9,13 @@ const {
 const mongoose = require("mongoose");
 const User = require("../models/Usuario");
 const Notification = require("../models/Notification");
+const Listing = require("../models/Listing");
+const Comment = require("../models/Comment");
 const { protect } = require("../utils/auth");
 const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
-const { createNotification } = require("../utils/notificationUtils")
+const { createNotification } = require("../utils/notificationUtils");
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -118,7 +120,6 @@ router.get("/verifyAccount/:token", async (req, res) => {
   }
 });
 
-
 // User Login
 router.post("/login", async (req, res) => {
   console.log("na rota de login");
@@ -126,18 +127,24 @@ router.post("/login", async (req, res) => {
 
   try {
     if (!email || !password) {
-      return res.status(400).json({ message: "Todos os campos são necessários" });
+      return res
+        .status(400)
+        .json({ message: "Todos os campos são necessários" });
     }
 
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: "Credenciais inválidas" });
+    if (!user)
+      return res.status(400).json({ message: "Credenciais inválidas" });
 
     if (!user.isVerified) {
-      return res.status(403).json({ message: "Verifique sua conta antes de fazer login." });
+      return res
+        .status(403)
+        .json({ message: "Verifique sua conta antes de fazer login." });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: "Credenciais inválidas" });
+    if (!isMatch)
+      return res.status(400).json({ message: "Credenciais inválidas" });
 
     // Criar o token
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
@@ -163,26 +170,101 @@ router.post("/login", async (req, res) => {
   }
 });
 
-
 // User Signout
 router.post("/signout", (req, res) => {
   res.json({ msg: "Sessão encerrada!" });
 });
 
-// Delete User Account
 router.delete("/delete-account/:id", async (req, res) => {
-  console.log("rota para deletar conta alcançada")
-  
+  console.log("rota para deletar conta alcançada");
+
   const { id } = req.params;
+
   try {
     if (!mongoose.Types.ObjectId.isValid(id))
       return res.status(400).json({ message: "Invalid user ID" });
 
-    const result = await User.findByIdAndDelete(id);
-    if (!result) return res.status(404).json({ message: "User not found" });
+    // 1. Deletar todos os listings criados pelo usuário
+    console.log("Deletando listings...");
+    await Listing.deleteMany({ userId: id });
 
-    res.status(200).json({ message: "Account deleted successfully" });
+    // 2. Remover o usuário de todas as listas de amigos e solicitações
+    console.log("Removendo usuário das listas de amigos...");
+    await User.updateMany(
+      {
+        $or: [
+          { friends: id },
+          { sentFriendRequests: id },
+          { friendRequests: id },
+        ],
+      },
+      {
+        $pull: {
+          friends: id,
+          sentFriendRequests: id,
+          friendRequests: id,
+        },
+      }
+    );
+
+    // 3. Remover comentários feitos pelo usuário
+    console.log("Removendo comentários...");
+    await Listing.updateMany(
+      {},
+      { $pull: { comments: { user: id } } }
+    );
+
+    // 4. Remover replies feitas pelo usuário
+    console.log("Removendo replies...");
+    await Listing.updateMany(
+      {},
+      { $pull: { "comments.$[].replies": { user: id } } }
+    );
+
+    // 5. Remover likes do usuário em listings
+    console.log("Removendo likes de listings...");
+    await Listing.updateMany(
+      {},
+      { $pull: { likes: id } }
+    );
+
+    // 6. Remover likes do usuário em comentários e replies
+    console.log("Removendo likes de comentários e replies...");
+    const listings = await Listing.find({});
+
+    for (const listing of listings) {
+      let modified = false;
+
+      for (const comment of listing.comments) {
+        // Remover like do comentário
+        const originalLikes = comment.likes.length;
+        comment.likes = comment.likes.filter(
+          (userId) => userId.toString() !== id
+        );
+        if (comment.likes.length !== originalLikes) modified = true;
+
+        // Remover like das replies
+        for (const reply of comment.replies) {
+          const originalReplyLikes = reply.likes.length;
+          reply.likes = reply.likes.filter(
+            (userId) => userId.toString() !== id
+          );
+          if (reply.likes.length !== originalReplyLikes) modified = true;
+        }
+      }
+
+      if (modified) await listing.save();
+    }
+
+    // 7. Finalmente, deletar o próprio usuário
+    console.log("Deletando usuário...");
+    const result = await User.findByIdAndDelete(id);
+    if (!result)
+      return res.status(404).json({ message: "Usuário não encontrado" });
+
+    res.status(200).json({ message: "Conta deletada com sucesso." });
   } catch (error) {
+    console.error("Erro ao deletar conta:", error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -288,10 +370,11 @@ router.put("/resetPassword", async (req, res) => {
 // Atualizar informações do usuário
 // Atualizar informações do usuário
 router.put("/update/:id", async (req, res) => {
-  console.log("rota para atualizar alcançada...")
-  
+  console.log("rota para atualizar alcançada...");
+
   const { id } = req.params;
-  const { currentPassword, newPassword, confirmPassword, ...updates } = req.body;
+  const { currentPassword, newPassword, confirmPassword, ...updates } =
+    req.body;
 
   try {
     const user = await User.findById(id);
@@ -300,7 +383,9 @@ router.put("/update/:id", async (req, res) => {
     // Se o usuário está tentando alterar a senha
     if (currentPassword || newPassword || confirmPassword) {
       if (!currentPassword || !newPassword || !confirmPassword) {
-        return res.status(400).json({ error: "Preencha todos os campos da senha." });
+        return res
+          .status(400)
+          .json({ error: "Preencha todos os campos da senha." });
       }
 
       const isMatch = await bcrypt.compare(currentPassword, user.password);
@@ -310,8 +395,10 @@ router.put("/update/:id", async (req, res) => {
       }
 
       if (newPassword !== confirmPassword) {
-        console.log("senha auterada")
-        return res.status(400).json({ error: "A nova senha e a confirmação não coincidem." });
+        console.log("senha auterada");
+        return res
+          .status(400)
+          .json({ error: "A nova senha e a confirmação não coincidem." });
       }
 
       const salt = await bcrypt.genSalt(10);
@@ -319,11 +406,17 @@ router.put("/update/:id", async (req, res) => {
       updates.password = hashed;
     }
 
-    const updatedUser = await User.findByIdAndUpdate(id, { $set: updates }, { new: true });
+    const updatedUser = await User.findByIdAndUpdate(
+      id,
+      { $set: updates },
+      { new: true }
+    );
 
-    console.log("atualizado!")
+    console.log("atualizado!");
 
-    res.status(200).json({ message: "Usuário atualizado com sucesso", user: updatedUser });
+    res
+      .status(200)
+      .json({ message: "Usuário atualizado com sucesso", user: updatedUser });
   } catch (error) {
     console.error("Erro ao atualizar usuário:", error);
     res.status(500).json({ error: "Erro interno ao atualizar o usuário" });
@@ -338,7 +431,9 @@ router.post("/friendRequest/:friendId", protect, async (req, res) => {
   const { friendId } = req.params;
 
   if (userId.toString() === friendId) {
-    return res.status(400).json({ error: "Você não pode se adicionar como amigo." });
+    return res
+      .status(400)
+      .json({ error: "Você não pode se adicionar como amigo." });
   }
 
   const user = await User.findById(userId);
@@ -353,7 +448,9 @@ router.post("/friendRequest/:friendId", protect, async (req, res) => {
   const alreadyReceived = friend.friendRequests.includes(userId);
 
   if (alreadyFriends || alreadySent || alreadyReceived) {
-    return res.status(400).json({ error: "Pedido já enviado ou usuário já é seu amigo." });
+    return res
+      .status(400)
+      .json({ error: "Pedido já enviado ou usuário já é seu amigo." });
   }
 
   // Inicializa arrays caso venham undefined
@@ -373,9 +470,10 @@ router.post("/friendRequest/:friendId", protect, async (req, res) => {
     content: `${user.username} te enviou um pedido de amizade.`,
   });
 
-  return res.status(200).json({ message: "Pedido de amizade enviado com sucesso." });
+  return res
+    .status(200)
+    .json({ message: "Pedido de amizade enviado com sucesso." });
 });
-
 
 // accept friend request:
 router.post("/acceptFriend/:requesterId", protect, async (req, res) => {
@@ -459,7 +557,6 @@ router.post("/rejectFriend/:requesterId", protect, async (req, res) => {
   return res.status(200).json({ message: "Pedido de amizade recusado." });
 });
 
-
 // lista de pedidos pendentes
 router.get("/friendRequests", protect, async (req, res) => {
   const userId = req.user._id;
@@ -481,7 +578,9 @@ router.post("/removeFriend/:friendId", protect, async (req, res) => {
     const friend = await User.findById(friendId);
 
     user.friends = user.friends.filter((id) => id.toString() !== friendId);
-    friend.friends = friend.friends.filter((id) => id.toString() !== userId.toString());
+    friend.friends = friend.friends.filter(
+      (id) => id.toString() !== userId.toString()
+    );
 
     await user.save();
     await friend.save();
@@ -491,7 +590,6 @@ router.post("/removeFriend/:friendId", protect, async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 });
-
 
 // 🔹 Get friends list
 // 🔹 Buscar amigos de qualquer usuário pelo ID
@@ -514,6 +612,5 @@ router.get("/:userId/friends", async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 });
-
 
 module.exports = router;
