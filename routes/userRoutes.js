@@ -283,6 +283,51 @@ router.put("/resetPassword", async (req, res) => {
   }
 });
 
+// Atualizar informações do usuário
+// Atualizar informações do usuário
+router.put("/update/:id", async (req, res) => {
+  console.log("rota para atualizar alcançada...")
+  
+  const { id } = req.params;
+  const { currentPassword, newPassword, confirmPassword, ...updates } = req.body;
+
+  try {
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
+
+    // Se o usuário está tentando alterar a senha
+    if (currentPassword || newPassword || confirmPassword) {
+      if (!currentPassword || !newPassword || !confirmPassword) {
+        return res.status(400).json({ error: "Preencha todos os campos da senha." });
+      }
+
+      const isMatch = await bcrypt.compare(currentPassword, user.password);
+
+      if (!isMatch) {
+        return res.status(401).json({ error: "Senha atual incorreta." });
+      }
+
+      if (newPassword !== confirmPassword) {
+        console.log("senha auterada")
+        return res.status(400).json({ error: "A nova senha e a confirmação não coincidem." });
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      const hashed = await bcrypt.hash(newPassword, salt);
+      updates.password = hashed;
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(id, { $set: updates }, { new: true });
+    
+    console.log("atualizado!")
+
+    res.status(200).json({ message: "Usuário atualizado com sucesso", user: updatedUser });
+  } catch (error) {
+    console.error("Erro ao atualizar usuário:", error);
+    res.status(500).json({ error: "Erro interno ao atualizar o usuário" });
+  }
+});
+
 // Send friend request
 router.post("/friendRequest/:friendId", protect, async (req, res) => {
   console.log("🔹 Enviando pedido de amizade");
