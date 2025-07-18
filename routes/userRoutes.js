@@ -15,7 +15,7 @@ const { protect } = require("../utils/auth");
 const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
-const { createNotification } = require("../utils/notificationUtils");
+const createNotification = require("../utils/notificationUtils");
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -463,11 +463,12 @@ router.post("/friendRequest/:friendId", protect, async (req, res) => {
   await user.save();
   await friend.save();
 
+   // ✅ Aqui: criar notificação
   await createNotification({
-    type: "friend_request",
     recipient: friendId,
     fromUser: userId,
-    content: `${user.username} te enviou um pedido de amizade.`,
+    type: "friend_request",
+    content: "enviou um pedido de amizade",
   });
 
   return res

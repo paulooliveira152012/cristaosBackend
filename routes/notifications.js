@@ -4,6 +4,7 @@ const {
   getNotifications,
   createNotification,      // 🆕 Criar notificação
   markAsRead,
+  markAllAsRead,
   deleteNotification,
 } = require("../controllers/notificationController.js");
 
@@ -15,6 +16,9 @@ router.get("/", protect, getNotifications);
 
 // ➕ POST criar uma nova notificação
 router.post("/", protect, createNotification);
+
+// marcar todas como lidas
+router.put("/read-all", protect, markAllAsRead);
 
 // ✅ PUT marcar uma notificação como lida
 router.put("/read/:id", protect, markAsRead);

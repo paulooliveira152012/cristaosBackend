@@ -1,20 +1,30 @@
-// utils/notificationUtils.js
 const Notification = require("../models/Notification");
 
-const createNotification = async ({ type, recipient, fromUser, listing = null, comment = null }) => {
-    console.log("utils for creating a new notification...")
-    console.log("Type:", type, "recipient:", recipient, "sender:", fromUser)
+const createNotification = async ({
+  recipient,
+  fromUser,
+  type,
+  content,
+  listingId,
+  commentId = null,
+}) => {
+  try {
+    if (recipient.toString() === fromUser.toString()) return; // não notifica a si mesmo
 
-        const newNotification = new Notification({
-          type,
-          recipient,
-          fromUser,
-          listing,
-          comment,
-        });
-        
-          await newNotification.save();
-          return newNotification;
-    }
+    const newNotification = new Notification({
+      type, // "like" ou "comment"
+      recipient,
+      fromUser,
+      content,
+      listingId,
+      commentId,
+    });
 
-module.exports = { createNotification };
+    await newNotification.save();
+    console.log("🔔 Notificação criada:", type);
+  } catch (error) {
+    console.error("❌ Erro ao criar notificação:", error.message);
+  }
+};
+
+module.exports = createNotification;

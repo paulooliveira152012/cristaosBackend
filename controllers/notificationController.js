@@ -50,27 +50,39 @@ exports.createNotification = async (req, res) => {
 
 
 // Marcar como lida
+// ✅ Marcar como lida
 exports.markAsRead = async (req, res) => {
   try {
-    const { notificationId } = req.params;
-
-    await Notification.findByIdAndUpdate(notificationId, {
-      isRead: true,
-    });
-
+    const notificationId = req.params.id; // corrigido
+    await Notification.findByIdAndUpdate(notificationId, { isRead: true });
     res.status(200).json({ message: "Notificação marcada como lida." });
   } catch (error) {
     res.status(500).json({ message: "Erro ao marcar notificação como lida." });
   }
 };
 
-// Deletar notificação
+// Marcar todas as notificações do usuário como lidas
+// ✅ Marcar todas como lidas
+exports.markAllAsRead = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    await Notification.updateMany(
+      { recipient: userId, isRead: false },
+      { $set: { isRead: true } }
+    );
+    res.status(200).json({ message: "Todas as notificações foram marcadas como lidas." });
+  } catch (error) {
+    console.error("Erro ao marcar todas como lidas:", error);
+    res.status(500).json({ message: "Erro ao marcar notificações como lidas." });
+  }
+};
+
+
+// ✅ Deletar notificação
 exports.deleteNotification = async (req, res) => {
   try {
-    const { notificationId } = req.params;
-
+    const notificationId = req.params.id; // corrigido
     await Notification.findByIdAndDelete(notificationId);
-
     res.status(200).json({ message: "Notificação deletada com sucesso." });
   } catch (error) {
     res.status(500).json({ message: "Erro ao deletar notificação." });
