@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const Comment = require("../models/Comment");
 const Listing = require("../models/Listing");
 const User = require("../models/Usuario");
-
+const createNotification = require("../utils/notificationUtils");
 const router = express.Router();
 
 // Add Top-Level Comment
@@ -44,6 +44,19 @@ router.post("/listings/:listingId/comment", async (req, res) => {
 
     // save the updated listing with the comment
     await listing.save();
+
+    // send notification
+    // ✅ Se for um novo like e o dono do post for diferente do usuário
+        if (listing.userId.toString() !== userId.toString()) {
+          await createNotification({
+            recipient: listing.userId,
+            fromUser: userId,
+            type: "comment",
+            content: `${user.username} comentou seu post! ${listing}`,
+            listingId: listing._id,
+            commentId: newComment._id
+          });
+        }
 
     // Respond with the updated comments array
     res
