@@ -108,15 +108,21 @@ router.post("/listings/:parentCommentId/reply", async (req, res) => {
        return res.status(404).json({ message: "Parent comment not found" });
      }
 
+      const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado" });
+    }
+
     console.log("parent comment found", parentComment)
 
      // Create the reply object
-     const newReply = {
-      _id: new mongoose.Types.ObjectId(), // Generate a unique ID for the reply
+ 
+    const newReply = {
+      _id: new mongoose.Types.ObjectId(),
       text: replyText,
       user: userId,
-      username: (await User.findById(userId)).username,
-      profileImage: (await User.findById(userId)).profileImage,
+      username: user.username,
+      profileImage: user.profileImage,
       createdAt: new Date(),
       likes: [],
     };
@@ -126,6 +132,19 @@ router.post("/listings/:parentCommentId/reply", async (req, res) => {
 
     // Save the parent comment with the new reply
     await listing.save();
+
+        // send notification
+    // ✅ Se for um novo like e o dono do post for diferente do usuário
+        if (parentComment.user.toString() !== userId.toString()) {
+          await createNotification({
+            recipient: parentComment.user, // autor do comentario original
+            fromUser: userId,
+            type: "reply",
+            content: `${user.username} respondeu seu comentario! ${newReply.text}`,
+            listingId: listing._id,
+            commentId: parentComment._id
+          });
+        }
 
     res.status(201).json({ message: "Reply added", reply: newReply });
   } catch (error) {
