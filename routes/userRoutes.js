@@ -128,7 +128,7 @@ router.get("/users/:id", protect, async (req, res) => {
 });
 
 // /routes/userRoutes.js
-router.get("/users/current", protect, async (req, res) => {
+router.get("/current", protect, async (req, res) => {
   if (!req.user) {
     console.log("usuario nao autenticado");
     return res.status(401).json({ message: "Não autenticado" });
