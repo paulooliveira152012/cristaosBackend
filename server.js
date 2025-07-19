@@ -29,13 +29,8 @@ const server = http.createServer(app);
 // Define allowed origins
 const allowedOrigins = [
   'http://localhost:3000',
-  'http://localhost:3002',
-  'http://192.168.15.91:3000',
-  'http://192.168.15.5:3000',
-  'http://192.168.3.11:3000',
-  'https://cristaosfrontend.vercel.app',          // sem hífen
   'https://cristaos-frontend.vercel.app',         // com hífen
-  'https://www.cristaosfrontend.vercel.app',      // com www, se tiver
+  'https://www.cristaos-frontend.vercel.app',      // com www, se tiver
 ];
 
 // Initialize Socket.IO (locally)
@@ -62,10 +57,16 @@ app.use(express.json());
 // Set up CORS configuration for different environments
 // Set up CORS for API
 app.use(cors({
-  origin: allowedOrigins,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS: " + origin));
+    }
+  },
   credentials: true,
 }));
+
 
 app.use(cookieParser()); // <--- ESSENCIAL para ler cookies!
 
