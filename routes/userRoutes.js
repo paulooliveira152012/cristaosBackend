@@ -130,12 +130,11 @@ router.get("/users/:id", protect, async (req, res) => {
 // /routes/userRoutes.js
 router.get("/users/current", protect, async (req, res) => {
   if (!req.user) {
-    console.log("usuario nao autenticado")
+    console.log("usuario nao autenticado");
     return res.status(401).json({ message: "Não autenticado" });
-  } 
+  }
   res.status(200).json(req.user); // já vem sem senha do middleware
 });
-
 
 // User Login
 router.post("/login", async (req, res) => {
@@ -170,12 +169,14 @@ router.post("/login", async (req, res) => {
 
     console.log("token JWT:", token);
 
+    const isProduction = process.env.NODE_ENV === "production";
+
     // Enviar o token como cookie
     res.cookie("token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // true apenas em produção
-      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", // None para domínios diferentes (Vercel + Render), Lax localmente
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
+      secure: isProduction, // só usa HTTPS se production
+      sameSite: isProduction ? "None" : "Lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     // Retornar o usuário (sem a senha)
@@ -185,6 +186,12 @@ router.post("/login", async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+});
+
+// debug route for cookies set up
+router.get("/debug/cookies", (req, res) => {
+  console.log("🥳🥳🥳 Cookies recebidos:", req.cookies);
+  res.json(req.cookies);
 });
 
 // User Signout

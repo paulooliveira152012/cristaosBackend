@@ -12,8 +12,11 @@ const protect = async (req, res, next) => {
     const user = await User.findById(decoded.id).select("-password");
 
     if (!user) {
-      // ✅ usuário não existe mais: deslogar
-      res.clearCookie("jwt");
+      res.clearCookie("token", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+      });
       return res
         .status(401)
         .json({ message: "Conta não encontrada. Faça login novamente." });
@@ -22,10 +25,15 @@ const protect = async (req, res, next) => {
     req.user = user;
     next();
   } catch (err) {
-     res.clearCookie("jwt");
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+    });
     return res.status(401).json({ message: "Sessão expirada ou inválida." });
   }
 };
+
 
 // ✅ Middleware para verificar token de email (ex: link de verificação de conta)
 const verifyToken = async (req, res, next) => {
