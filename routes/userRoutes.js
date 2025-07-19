@@ -127,6 +127,15 @@ router.get("/users/:id", protect, async (req, res) => {
   res.status(200).json({ user });
 });
 
+// /routes/userRoutes.js
+router.get("/users/current", protect, async (req, res) => {
+  if (!req.user) {
+    console.log("usuario nao autenticado")
+    return res.status(401).json({ message: "Não autenticado" });
+  } 
+  res.status(200).json(req.user); // já vem sem senha do middleware
+});
+
 
 // User Login
 router.post("/login", async (req, res) => {
@@ -164,8 +173,8 @@ router.post("/login", async (req, res) => {
     // Enviar o token como cookie
     res.cookie("token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // true em produção
-      sameSite: "None",
+      secure: process.env.NODE_ENV === "production", // true apenas em produção
+      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", // None para domínios diferentes (Vercel + Render), Lax localmente
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
     });
 
@@ -217,10 +226,7 @@ router.delete("/delete-account/:id", async (req, res) => {
 
     // 3. Remover comentários feitos pelo usuário
     console.log("Removendo comentários...");
-    await Listing.updateMany(
-      {},
-      { $pull: { comments: { user: id } } }
-    );
+    await Listing.updateMany({}, { $pull: { comments: { user: id } } });
 
     // 4. Remover replies feitas pelo usuário
     console.log("Removendo replies...");
@@ -231,10 +237,7 @@ router.delete("/delete-account/:id", async (req, res) => {
 
     // 5. Remover likes do usuário em listings
     console.log("Removendo likes de listings...");
-    await Listing.updateMany(
-      {},
-      { $pull: { likes: id } }
-    );
+    await Listing.updateMany({}, { $pull: { likes: id } });
 
     // 6. Remover likes do usuário em comentários e replies
     console.log("Removendo likes de comentários e replies...");
@@ -471,7 +474,7 @@ router.post("/friendRequest/:friendId", protect, async (req, res) => {
   await user.save();
   await friend.save();
 
-   // ✅ Aqui: criar notificação
+  // ✅ Aqui: criar notificação
   await createNotification({
     recipient: friendId,
     fromUser: userId,
