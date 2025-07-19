@@ -52,7 +52,7 @@ router.post("/listings/:listingId/comment", async (req, res) => {
             recipient: listing.userId,
             fromUser: userId,
             type: "comment",
-            content: `${user.username} comentou seu post! ${listing}`,
+            content: `${user.username} comentou seu post!`,
             listingId: listing._id,
             commentId: newComment._id
           });
@@ -140,9 +140,9 @@ router.post("/listings/:parentCommentId/reply", async (req, res) => {
             recipient: parentComment.user, // autor do comentario original
             fromUser: userId,
             type: "reply",
-            content: `${user.username} respondeu seu comentario! ${newReply.text}`,
+            content: `${user.username} respondeu seu comentario!`,
             listingId: listing._id,
-            commentId: parentComment._id
+            commentId: parentComment._id,
           });
         }
 

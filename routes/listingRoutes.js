@@ -135,7 +135,7 @@ router.put("/listingLike/:listingId", async (req, res) => {
         recipient: listing.userId,
         fromUser: userId,
         type: "like",
-        content: `${user.username} curtiu seu post! ${listing}`,
+        content: `${user.username} curtiu seu post!`,
         listingId: listing._id,
       });
     }
