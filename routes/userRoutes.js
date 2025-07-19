@@ -169,13 +169,12 @@ router.post("/login", async (req, res) => {
 
     console.log("token JWT:", token);
 
-    const isProduction = process.env.NODE_ENV === "production";
 
     // Enviar o token como cookie
     res.cookie("token", token, {
       httpOnly: true,
-      secure: isProduction, // só usa HTTPS se production
-      sameSite: isProduction ? "None" : "Lax",
+      secure: true, 
+      sameSite: "None",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
