@@ -120,6 +120,14 @@ router.get("/verifyAccount/:token", async (req, res) => {
   }
 });
 
+// Rota para verificar existência de usuário
+router.get("/users/:id", protect, async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ message: "Usuário não encontrado" });
+  res.status(200).json({ user });
+});
+
+
 // User Login
 router.post("/login", async (req, res) => {
   console.log("na rota de login");

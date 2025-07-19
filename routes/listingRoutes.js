@@ -1,9 +1,10 @@
 const express = require("express");
 const Listing = require("../models/Listing");
-const Comment = require("../models/Comment")
+const Comment = require("../models/Comment");
 const router = express.Router();
 // const User = require("../models/User");
-const User = require("../models/Usuario")
+const User = require("../models/Usuario");
+const createNotification = require("../utils/notificationUtils");
 
 // Get All Listings
 router.get("/alllistings", async (req, res) => {
@@ -14,12 +15,12 @@ router.get("/alllistings", async (req, res) => {
       "username profileImage"
     );
 
-     // Log the listings to verify they contain user data
-    console.log("Listings fetched:", listings)
+    // Log the listings to verify they contain user data
+    console.log("Listings fetched:", listings);
 
     res.status(200).json({ listings });
   } catch (error) {
-    console.log("error:", error)
+    console.log("error:", error);
     res.status(500).json({ message: "Error fetching listings", error });
   }
 });
@@ -72,22 +73,22 @@ router.get("/users/:userId", async (req, res) => {
 
 // Get Listing by ID
 router.get("/listings/:id", async (req, res) => {
-  console.log("backend reached for fetch items [WITHOUT COMMENTS] ")
-  
+  console.log("backend reached for fetch items [WITHOUT COMMENTS] ");
+
   const { id } = req.params;
-  console.log("the listing id is", id)
+  console.log("the listing id is", id);
 
   try {
     const listing = await Listing.findById(id);
     if (!listing) return res.status(404).json({ message: "Listing not found" });
 
     // fetch only commments with matching ID
-    const comments = await Comment.find({ listingId: id })
+    const comments = await Comment.find({ listingId: id });
 
-    console.log("sending the data to frontEnd:", {listing, comments})
+    console.log("sending the data to frontEnd:", { listing, comments });
     res.status(200).json({ listing, comments });
   } catch (error) {
-    console.error("Error fetching listing:", error);  // Log full error details
+    console.error("Error fetching listing:", error); // Log full error details
     res.status(500).json({ message: "Error fetching listing", error });
   }
 });
@@ -124,6 +125,22 @@ router.put("/listingLike/:listingId", async (req, res) => {
 
     // Salvar as mudanças
     await listing.save({ validateBeforeSave: false });
+
+    const user = await User.findById(userId)
+    console.log("o usuario que curtiu foi:", user)
+
+    // ✅ Se for um novo like e o dono do post for diferente do usuário
+    if (!isLiked && listing.userId.toString() !== userId.toString()) {
+      await createNotification({
+        recipient: listing.userId,
+        fromUser: userId,
+        type: "like",
+        content: `${user.username} curtiu seu post! ${listing}`,
+        listingId: listing._id,
+      });
+    }
+
+    console.log("new notification created!")
 
     console.log("Lista de likes após a alteração:", listing.likes);
     res.status(200).json({ likes: listing.likes });
@@ -238,7 +255,7 @@ router.post("/share/:listingId", async (req, res) => {
 
 // Delete Listing
 router.delete("/delete/:listingId", async (req, res) => {
-  console.log("delete lisitng route reached")
+  console.log("delete lisitng route reached");
   const { listingId } = req.params;
 
   try {
