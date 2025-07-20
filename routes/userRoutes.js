@@ -169,13 +169,21 @@ router.post("/login", async (req, res) => {
 
     console.log("token JWT:", token);
 
-
     // Enviar o token como cookie
-    res.cookie("token", token, {
+    // Produção:
+    // res.cookie("token", token, {
+    //   httpOnly: true,
+    //   secure: true,
+    //   sameSite: "None",
+    //   maxAge: 7 * 24 * 60 * 60 * 1000,
+    // });
+
+    // desenvolvimento:
+    res.cookie("jwt", token, {
       httpOnly: true,
-      secure: true, 
-      sameSite: "None",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      secure: false, // ✅ permite cookies via HTTP
+      sameSite: "Lax", // ✅ compatível com HTTP e múltiplos domínios no local
+      maxAge: 1000 * 60 * 60 * 24 * 7,
     });
 
     // Retornar o usuário (sem a senha)
@@ -496,7 +504,6 @@ router.post("/friendRequest/:friendId", protect, async (req, res) => {
 router.get("/ping", (req, res) => {
   res.send("pong");
 });
-
 
 // accept friend request:
 router.post("/acceptFriend/:requesterId", protect, async (req, res) => {

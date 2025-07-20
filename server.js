@@ -29,6 +29,7 @@ const server = http.createServer(app);
 // Define allowed origins
 const allowedOrigins = [
   'http://localhost:3000',
+  'http://192.168.15.91:3000',
   'https://cristaos-frontend.vercel.app',         // com hífen
   'https://www.cristaos-frontend.vercel.app',      // com www, se tiver
 ];
@@ -95,6 +96,6 @@ mongoose.connect(process.env.MONGO_URI)
 const PORT = process.env.PORT || 5001;
 
 // Start the server and listen on the specified port
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server is running on port ${PORT}`);
 });
