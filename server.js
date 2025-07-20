@@ -20,7 +20,7 @@ dotenvFlow.config()
 console.log("Ambiente atual:", process.env.NODE_ENV);
 console.log("URL de verificação:", process.env.VERIFICATION_URL);
 
-// Initialize express app
+// 0 - Initialize express app
 const app = express();
 
 // Create an HTTP server that wraps the Express app
@@ -51,27 +51,33 @@ require('./socket')(io); // Assuming you handle your socket logic in `socket/ind
 
 
 
-// Middleware to parse JSON and handle CORS
-app.use(express.json());
 
+
+// 1st
 // Set up CORS configuration for different environments
 // Set up CORS for API
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS: " + origin));
-    }
-  },
+  origin: allowedOrigins,
   credentials: true,
 }));
 
 
+// 2nd cookieParser 
 app.use(cookieParser()); // <--- ESSENCIAL para ler cookies!
 
+// 3rd JSON parser
+// Middleware to parse JSON and handle CORS
+app.use(express.json());
+
+// 4th Rotas
 // Use the imported routes for the API
 app.use('/api', routes);
+
+// Global error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ message: 'An unexpected error occurred.' });
+});
 
 // Connect to MongoDB using Mongoose
 mongoose.connect(process.env.MONGO_URI)
@@ -83,11 +89,7 @@ mongoose.connect(process.env.MONGO_URI)
   });
 
 
-// Global error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'An unexpected error occurred.' });
-});
+
 
 // Set the port for the server (use environment variable if available, otherwise default to 5001)
 const PORT = process.env.PORT || 5001;

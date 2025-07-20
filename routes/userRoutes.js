@@ -493,6 +493,11 @@ router.post("/friendRequest/:friendId", protect, async (req, res) => {
     .json({ message: "Pedido de amizade enviado com sucesso." });
 });
 
+router.get("/ping", (req, res) => {
+  res.send("pong");
+});
+
+
 // accept friend request:
 router.post("/acceptFriend/:requesterId", protect, async (req, res) => {
   const userId = req.user._id;
