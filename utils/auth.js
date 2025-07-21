@@ -34,7 +34,6 @@ const protect = async (req, res, next) => {
   }
 };
 
-
 // ✅ Middleware para verificar token de email (ex: link de verificação de conta)
 const verifyToken = async (req, res, next) => {
   const token = req.cookies.token; // ou header, dependendo do seu login
@@ -56,11 +55,9 @@ const verifyToken = async (req, res, next) => {
 // (opcional) para proteger ações só de líderes
 const verifyLeader = (req, res, next) => {
   if (!req.user || (req.user.leader !== true && req.user.leader !== "true")) {
-    return res
-      .status(403)
-      .json({
-        message: "Acesso negado. Apenas líderes podem realizar essa ação.",
-      });
+    return res.status(403).json({
+      message: "Acesso negado. Apenas líderes podem realizar essa ação.",
+    });
   }
   next();
 };
