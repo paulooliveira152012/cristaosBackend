@@ -1,4 +1,9 @@
-const { addUser, removeUser, emitOnlineUsers } = require("./onlineUsers");
+const {
+  addUser,
+  removeUser,
+  emitOnlineUsers,
+  getOnlineUsers,
+} = require("./onlineUsers");
 
 const {
   emitChatHistory,
@@ -380,6 +385,12 @@ module.exports = function (io) {
       } catch (error) {
         emitError("Error deleting the message.");
       }
+    });
+
+    // pedir usuarios online
+    socket.on("getOnlineUsers", () => {
+      const users = getOnlineUsers();
+      socket.emit("onlineUsers", users);
     });
 
     // 🔓 LOGOUT
