@@ -117,6 +117,12 @@ module.exports = function (io) {
       }
     });
 
+    socket.on("joinRoomChat", ({ roomId, user }) => {
+      if (!roomId || !user) return;
+      socket.join(roomId);
+      console.log(`${user.username} entrou na sala de chat ${roomId}`);
+    });
+
     // 2.d subir usuario para quem esta falando
     // 🎤 Subir ao palco
     socket.on("joinAsSpeaker", async ({ roomId, userId }) => {
