@@ -36,6 +36,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: false,
     },
+    
+    // atualização de email
+    emailUpdateToken: { type: String },
+    newEmail: { type: String },
+
     // Add fields for verification process
     verificationCode: {
       type: String,

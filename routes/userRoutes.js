@@ -4,6 +4,7 @@ const crypto = require("crypto");
 // Function to send emails
 const {
   sendVerificationLink,
+  sendEmailUpdateVerification,
   sendResetLink,
 } = require("../utils/emailService");
 const mongoose = require("mongoose");
@@ -398,12 +399,40 @@ router.put("/update/:id", async (req, res) => {
   console.log("rota para atualizar alcançada...");
 
   const { id } = req.params;
-  const { currentPassword, newPassword, confirmPassword, ...updates } =
+  const { currentPassword, newPassword, confirmPassword, email, ...updates } =
     req.body;
 
   try {
     const user = await User.findById(id);
-    if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
+    if (!user)
+      return res.status(404).json({ error: "Usuário não encontrado." });
+
+    // Verifica se o e-mail está tentando ser alterado
+    if (email && email !== user.email) {
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res
+          .status(400)
+          .json({ error: "Este e-mail já está em uso por outro usuário." });
+      }
+
+      // Gerar token de verificação
+      const emailUpdateToken = crypto.randomBytes(32).toString("hex");
+      const verificationUrl = `${process.env.EMAIL_VERIFICATION_URL}/${emailUpdateToken}`;
+
+      // Salvar token e novo e-mail temporariamente
+      user.emailUpdateToken = emailUpdateToken;
+      user.newEmail = email;
+      await user.save();
+
+      // Enviar email de confirmação
+      await sendEmailUpdateVerification(email, verificationUrl);
+
+      return res.status(200).json({
+        message:
+          "Verificação enviada para o novo e-mail. Confirme para concluir a atualização.",
+      });
+    }
 
     // Se o usuário está tentando alterar a senha
     if (currentPassword || newPassword || confirmPassword) {
@@ -420,7 +449,6 @@ router.put("/update/:id", async (req, res) => {
       }
 
       if (newPassword !== confirmPassword) {
-        console.log("senha auterada");
         return res
           .status(400)
           .json({ error: "A nova senha e a confirmação não coincidem." });
@@ -437,16 +465,44 @@ router.put("/update/:id", async (req, res) => {
       { new: true }
     );
 
-    console.log("atualizado!");
+    console.log("Usuário atualizado com sucesso.");
 
     res
       .status(200)
       .json({ message: "Usuário atualizado com sucesso", user: updatedUser });
   } catch (error) {
     console.error("Erro ao atualizar usuário:", error);
-    res.status(500).json({ error: "Erro interno ao atualizar o usuário" });
+    res.status(500).json({ error: "Erro interno ao atualizar o usuário." });
   }
 });
+
+
+// Confirmar atualização de e-mail
+router.get("/confirm-email-update/:token", async (req, res) => {
+  console.log("Rota de confirmar novo email")
+  const { token } = req.params;
+
+  try {
+    const user = await User.findOne({ emailUpdateToken: token });
+
+    if (!user || !user.newEmail) {
+      return res.status(400).send("Token inválido ou expirado.");
+    }
+
+    // Atualizar o e-mail
+    user.email = user.newEmail;
+    user.newEmail = undefined;
+    user.emailUpdateToken = undefined;
+
+    await user.save();
+
+    res.send("E-mail atualizado com sucesso!");
+  } catch (error) {
+    console.error("Erro ao confirmar e-mail:", error);
+    res.status(500).send("Erro interno ao confirmar o e-mail.");
+  }
+});
+
 
 // Send friend request
 router.post("/friendRequest/:friendId", protect, async (req, res) => {

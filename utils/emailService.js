@@ -45,7 +45,27 @@ const sendVerificationLink = async (email, verificationLink) => {
   }
 };
 
+// Function to verify update email
+const sendEmailUpdateVerification = async (email, verificationLink) => {
+  const mailOptions = {
+    from: '"Cristaos App" <cristaosapp@gmail.com>',
+    to: email,
+    subject: 'Confirme a atualização do seu e-mail',
+    text: `Clique para confirmar a atualização do seu e-mail: ${verificationLink}`,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Email de atualização enviado para ${email}`);
+  } catch (error) {
+    console.error(`Erro ao enviar email de atualização:`, error.message);
+    throw new Error('Erro ao enviar o e-mail de confirmação.');
+  }
+};
+
+
 module.exports = {
   sendResetLink,
   sendVerificationLink, // Export the new function
+  sendEmailUpdateVerification
 };
