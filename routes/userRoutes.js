@@ -26,7 +26,6 @@ const {
   createJwtForUser,
 } = require("../utils/googleAuth");
 
-
 // google login
 router.post("/google-login", async (req, res) => {
   const { token } = req.body;
@@ -58,9 +57,9 @@ router.post("/google-login", async (req, res) => {
 // User Signup
 router.post("/signup", async (req, res) => {
   console.log("rota signup encontrada");
-  const { username, email, password, profileImage } = req.body;
+  const { username, email, password, phone, profileImage } = req.body;
 
-  console.log("Received fields:", { username, email, password, profileImage });
+  console.log("Received fields:", { username, email, phone, password, profileImage });
 
   try {
     // Check for missing fields
@@ -90,6 +89,7 @@ router.post("/signup", async (req, res) => {
     const user = new User({
       username,
       email,
+      phone,
       password: hashedPassword,
       profileImage: profileImage || "", // Optional profile image
       verificationToken, // Store the generated verification token
@@ -171,20 +171,31 @@ router.get("/current", protect, async (req, res) => {
 });
 
 // User Login
+// User Login
 router.post("/login", async (req, res) => {
-  console.log("na rota de login");
-  const { email, password } = req.body;
+  console.log("Rota de login acessada");
+
+  const { identifier, password } = req.body;
+  console.log(`identifier: ${identifier}, password: ${password}`);
 
   try {
-    if (!email || !password) {
+    if (!identifier || !password) {
       return res
         .status(400)
         .json({ message: "Todos os campos são necessários" });
     }
 
-    const user = await User.findOne({ email });
-    if (!user)
+    // Verifica se o identificador é um email ou telefone
+    const isEmail = identifier.includes("@");
+    const query = isEmail
+      ? { email: identifier.toLowerCase() }
+      : { phone: Number(identifier) };
+
+    const user = await User.findOne(query);
+
+    if (!user) {
       return res.status(400).json({ message: "Credenciais inválidas" });
+    }
 
     if (!user.isVerified) {
       return res
@@ -193,17 +204,37 @@ router.post("/login", async (req, res) => {
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch)
+    if (!isMatch) {
       return res.status(400).json({ message: "Credenciais inválidas" });
+    }
 
-    // Criar o token
+    // Criar JWT
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
 
-    console.log("token JWT:", token);
+    console.log("token JWT gerado:", token);
 
-    // Enviar o token como cookie
+    // Enviar o token como cookie (modo dev)
+    res.cookie("jwt", token, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "Lax",
+      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 dias
+    });
+
+    // Retornar dados do usuário sem senha
+    const userObject = user.toObject();
+    delete userObject.password;
+
+    res.status(200).json(userObject);
+  } catch (error) {
+    console.error("Erro no login:", error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+  // Enviar o token como cookie
     // Produção:
     // res.cookie("token", token, {
     //   httpOnly: true,
@@ -211,23 +242,6 @@ router.post("/login", async (req, res) => {
     //   sameSite: "None",
     //   maxAge: 7 * 24 * 60 * 60 * 1000,
     // });
-
-    // desenvolvimento:
-    res.cookie("jwt", token, {
-      httpOnly: true,
-      secure: false, // ✅ permite cookies via HTTP
-      sameSite: "Lax", // ✅ compatível com HTTP e múltiplos domínios no local
-      maxAge: 1000 * 60 * 60 * 24 * 7,
-    });
-
-    // Retornar o usuário (sem a senha)
-    const userObject = user.toObject();
-    delete userObject.password;
-    res.status(200).json(userObject);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
 
 // debug route for cookies set up
 router.get("/debug/cookies", (req, res) => {
@@ -509,10 +523,9 @@ router.put("/update/:id", async (req, res) => {
   }
 });
 
-
 // Confirmar atualização de e-mail
 router.get("/confirm-email-update/:token", async (req, res) => {
-  console.log("Rota de confirmar novo email")
+  console.log("Rota de confirmar novo email");
   const { token } = req.params;
 
   try {
@@ -535,7 +548,6 @@ router.get("/confirm-email-update/:token", async (req, res) => {
     res.status(500).send("Erro interno ao confirmar o e-mail.");
   }
 });
-
 
 // Send friend request
 router.post("/friendRequest/:friendId", protect, async (req, res) => {

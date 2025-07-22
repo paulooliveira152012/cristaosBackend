@@ -26,6 +26,10 @@ const userSchema = new mongoose.Schema(
       required: false,
       minlength: 6, // Password must be at least 6 characters long
     },
+    phone: {
+      type: Number,
+      required: false,
+    },
     profileImage: {
       type: String,
       default: "", // If no profile image is provided, use an empty string
