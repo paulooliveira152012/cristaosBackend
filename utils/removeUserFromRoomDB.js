@@ -1,17 +1,23 @@
 // utils/removeUserFromRoomDB.js
-
 const Room = require("../models/Room");
 
 const removeUserFromRoomDB = async (roomId, userId) => {
   try {
-    const updated = await Room.updateOne(
+    const updatedRoom = await Room.findOneAndUpdate(
       { _id: roomId },
-      { $pull: { currentUsersInRoom: { _id: userId } } }
+      {
+        $pull: {
+          currentUsersInRoom: { _id: userId },
+          currentUsersSpeaking: { _id: userId }, // <-- novo aqui!
+        },
+      },
+      { new: true }
     );
     console.log(`🧹 MongoDB: usuário ${userId} removido da sala ${roomId}`);
-    return updated;
+    return updatedRoom;
   } catch (err) {
     console.error("❌ Erro ao remover usuário do banco:", err);
+    return null;
   }
 };
 
