@@ -59,7 +59,13 @@ router.post("/signup", async (req, res) => {
   console.log("rota signup encontrada");
   const { username, email, password, phone, profileImage } = req.body;
 
-  console.log("Received fields:", { username, email, phone, password, profileImage });
+  console.log("Received fields:", {
+    username,
+    email,
+    phone,
+    password,
+    profileImage,
+  });
 
   try {
     // Check for missing fields
@@ -234,14 +240,14 @@ router.post("/login", async (req, res) => {
   }
 });
 
-  // Enviar o token como cookie
-    // Produção:
-    // res.cookie("token", token, {
-    //   httpOnly: true,
-    //   secure: true,
-    //   sameSite: "None",
-    //   maxAge: 7 * 24 * 60 * 60 * 1000,
-    // });
+// Enviar o token como cookie
+// Produção:
+// res.cookie("token", token, {
+//   httpOnly: true,
+//   secure: true,
+//   sameSite: "None",
+//   maxAge: 7 * 24 * 60 * 60 * 1000,
+// });
 
 // debug route for cookies set up
 router.get("/debug/cookies", (req, res) => {
@@ -504,6 +510,16 @@ router.put("/update/:id", async (req, res) => {
       const salt = await bcrypt.genSalt(10);
       const hashed = await bcrypt.hash(newPassword, salt);
       updates.password = hashed;
+    }
+
+    // ✅ Validar número de telefone, se estiver sendo atualizado
+    if (updates.phone !== undefined) {
+      const phoneStr = updates.phone.toString();
+      if (!/^\d{8,15}$/.test(phoneStr)) {
+        return res
+          .status(400)
+          .json({ error: "Número de telefone inválido. Use apenas números." });
+      }
     }
 
     const updatedUser = await User.findByIdAndUpdate(
