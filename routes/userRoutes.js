@@ -17,9 +17,42 @@ const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const createNotification = require("../utils/notificationUtils");
-
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
+
+const {
+  verifyGoogleToken,
+  findOrCreateUserFromGoogle,
+  createJwtForUser,
+} = require("../utils/googleAuth");
+
+
+// google login
+router.post("/google-login", async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    const googleData = await verifyGoogleToken(token);
+    const user = await findOrCreateUserFromGoogle(googleData);
+    const jwtToken = createJwtForUser(user._id);
+
+    // Remover senha antes de enviar
+    const userObj = user.toObject();
+    delete userObj.password;
+
+    res.cookie("jwt", jwtToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "Lax",
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+    });
+
+    res.status(200).json(userObj);
+  } catch (error) {
+    console.error("Erro no login com Google:", error);
+    res.status(401).json({ error: "Falha na autenticação com Google." });
+  }
+});
 
 // User Signup
 // User Signup

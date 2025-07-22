@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: true,
+      required: false,
       minlength: 6, // Password must be at least 6 characters long
     },
     profileImage: {
@@ -36,7 +36,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: false,
     },
-    
+
     // atualização de email
     emailUpdateToken: { type: String },
     newEmail: { type: String },
