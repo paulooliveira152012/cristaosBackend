@@ -21,8 +21,12 @@ const {
   liveRoomUsers,
 } = require("./liveRoomUsers");
 
+const removeUserFromRoomDB = require("../utils/removeUserFromRoomDB");
+
 const Room = require("../models/Room");
 const User = require("../models/Usuario");
+
+
 
 // wrapper para iniciar socket
 module.exports = function (io) {
@@ -393,18 +397,22 @@ module.exports = function (io) {
       socket.emit("onlineUsers", users);
     });
 
-    // 🔓 LOGOUT
-    socket.on("disconnect", () => {
-      const user = removeUser(socket.id); // Get the user before removing
-      if (user && user._id) {
-        // Remove the user from all rooms they were part of
-        Object.keys(liveRoomUsers).forEach((roomId) => {
-          removeUserFromRoom(roomId, user._id); // Remove the user from all rooms
-          emitLiveRoomUsers(io, roomId); // Update room users
-          io.in(roomId).emit("userLeft", { userId: user._id }); // Notify all users that this user has left
-        });
+    socket.on("disconnect", async () => {
+      console.log("disconect socket called")
+      const userId = removeUser(socket.id); // Agora retorna o ID
+
+      if (userId) {
+        console.log(`👋 Desconectado: ${userId}`);
+
+        for (const roomId of Object.keys(liveRoomUsers)) {
+          await removeUserFromRoom(roomId, userId); // ← MongoDB e memória
+          await removeUserFromRoomDB(roomId, userId)
+          emitLiveRoomUsers(io, roomId); // Atualiza usuários online na sala
+          io.to(roomId).emit("userLeft", { userId }); // Notifica frontend
+        }
+
+        emitOnlineUsers(io); // Atualiza globais
       }
-      emitOnlineUsers(io); // Emit global online users
     });
   });
 };

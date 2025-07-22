@@ -28,17 +28,17 @@ const getOnlineUsers = () => {
 // Remove user from the list
 const removeUser = (socketId) => {
   for (let userId in onlineUsers) {
-    // Find the user by their socketId
     onlineUsers[userId].socketIds = onlineUsers[userId].socketIds.filter(
       (id) => id !== socketId
     );
 
-    // If no more sockets are connected, remove the user
     if (onlineUsers[userId].socketIds.length === 0) {
       console.log(`🔴 Usuário ${userId} desconectado completamente`);
       delete onlineUsers[userId];
+      return userId; // <- IMPORTANTE!
     }
   }
+  return null;
 };
 
 // Emit the list of online users to all clients
