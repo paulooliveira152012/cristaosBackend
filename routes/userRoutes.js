@@ -67,6 +67,7 @@ router.post("/signup", async (req, res) => {
     phone,
     password,
     profileImage,
+    isVerified: true
   });
 
   try {
@@ -326,6 +327,12 @@ router.post("/login", async (req, res) => {
       return res
         .status(403)
         .json({ message: "Verifique sua conta antes de fazer login." });
+    }
+
+    if (!user.password) {
+      return res.status(403).json({ 
+        message: "Essa conta foi criada com o login do Google. Por favor, use 'Entrar com Google' ou clique em 'Esqueci minha senha' para definir uma senha." 
+      })
     }
 
     const isMatch = await bcrypt.compare(password, user.password);

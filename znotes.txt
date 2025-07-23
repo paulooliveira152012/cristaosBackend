@@ -5,6 +5,7 @@
 
 5 - atualizar todas as abas com o usuario que saiu.
 6 - se um usuario sai da sala, e volta, ja nao mostra mais os usuarios no palco
+7 - validar conta de usuario que logou pelo google no signUp.
 
 
 
