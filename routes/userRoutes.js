@@ -134,10 +134,51 @@ router.post("/signup", async (req, res) => {
 });
 
 // rota para mandar codigo de verificação por email
+router.post("/sendVerificationByEmail", async (req, res) => {
+  console.log("route: send email verification")
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ message: "ID do usuário não fornecido." });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    const email = user.email;
+    if (!email) {
+      return res
+        .status(400)
+        .json({ message: "Usuário não possui e-mail cadastrado." });
+    }
+
+    // Gerar novo token de verificação
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    user.verificationToken = verificationToken;
+    await user.save();
+
+    const verificationUrl = `${process.env.VERIFICATION_URL}${verificationToken}`;
+
+    console.log("Sending verification link to email:", email);
+
+    // Função que envia o email
+    await sendVerificationLink(email, verificationUrl);
+
+    res.status(200).json({
+      message: `Link de verificação enviado para ${email}.`,
+    });
+  } catch (error) {
+    console.error("Erro ao enviar link de verificação por email:", error);
+    res
+      .status(500)
+      .json({ message: "Erro ao enviar link de verificação por email." });
+  }
+});
 
 // rota para mandar codigo de verificação por telefone
-
-// resendVerificationByPhone
 router.post("/sendVerificationByPhone", async (req, res) => {
   console.log("route for sending a verification by SMS...");
 
@@ -197,7 +238,7 @@ router.get("/verifyAccount/:token", async (req, res) => {
 
     // Verify the user and clear the token
     user.isVerified = true;
-    user.verificationCode = undefined; // Clear the token once verified
+    user.verificationToken = undefined; // Clear the token once verified
     await user.save();
 
     console.log("User verified successfully:", user.email);
@@ -212,48 +253,7 @@ router.get("/verifyAccount/:token", async (req, res) => {
   }
 });
 
-router.post("/sendVerificationByEmail", async (req, res) => {
-  try {
-    const { userId } = req.body;
 
-    if (!userId) {
-      return res.status(400).json({ message: "ID do usuário não fornecido." });
-    }
-
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "Usuário não encontrado." });
-    }
-
-    const email = user.email;
-    if (!email) {
-      return res
-        .status(400)
-        .json({ message: "Usuário não possui e-mail cadastrado." });
-    }
-
-    // Gerar novo token de verificação
-    const verificationToken = crypto.randomBytes(32).toString("hex");
-    user.verificationToken = verificationToken;
-    await user.save();
-
-    const verificationUrl = `${process.env.EMAIL_VERIFICATION_URL}?token=${verificationToken}`;
-
-    console.log("Sending verification link to email:", email);
-
-    // Função que envia o email
-    await sendVerificationLink(email, verificationUrl);
-
-    res.status(200).json({
-      message: `Link de verificação enviado para ${email}.`,
-    });
-  } catch (error) {
-    console.error("Erro ao enviar link de verificação por email:", error);
-    res
-      .status(500)
-      .json({ message: "Erro ao enviar link de verificação por email." });
-  }
-});
 
 // resendVerificationByEmail
 router.post("/resendVerificationByEmail", async (req, res) => {
