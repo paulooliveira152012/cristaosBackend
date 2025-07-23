@@ -41,7 +41,7 @@ router.post("/google-login", async (req, res) => {
     const userObj = user.toObject();
     delete userObj.password;
 
-    res.cookie("jwt", jwtToken, {
+    res.cookie("token", jwtToken, {
       httpOnly: true,
       secure: false,
       sameSite: "Lax",
@@ -352,7 +352,7 @@ router.post("/login", async (req, res) => {
     console.log("token JWT gerado:", token);
 
     // Enviar o token como cookie (modo dev)
-    res.cookie("jwt", token, {
+    res.cookie("token", token, {
       httpOnly: true,
       secure: false,
       sameSite: "Lax",

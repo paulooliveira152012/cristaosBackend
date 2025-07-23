@@ -51,9 +51,6 @@ require('./socket')(io); // Assuming you handle your socket logic in `socket/ind
 // require('./socket/socketHandlers')(io);
 
 
-
-
-
 // 1st
 // Set up CORS configuration for different environments
 // Set up CORS for API
