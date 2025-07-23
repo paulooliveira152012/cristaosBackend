@@ -23,7 +23,8 @@
     "mongoose": "^8.6.1",
     "node-mailjet": "^6.0.6",
     "nodemailer": "^6.9.15",
-    "socket.io": "^4.7.5"
+    "socket.io": "^4.7.5",
+    "twilio": "^5.7.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

@@ -26,6 +26,8 @@ const {
   createJwtForUser,
 } = require("../utils/googleAuth");
 
+const { sendVerificationSMS } = require("../utils/sms");
+
 // google login
 router.post("/google-login", async (req, res) => {
   const { token } = req.body;
@@ -105,6 +107,13 @@ router.post("/signup", async (req, res) => {
     await user.save();
     console.log("User saved successfully");
 
+    return res.status(201).json({
+      message: `Usuário criado com sucesso! Verifique seu email para confirmar sua conta. ${user._id}`,
+      userId: user._id
+    })
+  
+    // qualquer coisa remova esse return
+    return;
     console.log("Sending verification link to email:", email);
     const verificationUrl = `${process.env.VERIFICATION_URL}${verificationToken}`;
 
@@ -112,8 +121,7 @@ router.post("/signup", async (req, res) => {
     await sendVerificationLink(email, verificationUrl);
 
     res.status(201).json({
-      message:
-        "Usuário criado com sucesso! Verifique seu email para confirmar sua conta.",
+      message: `Usuário criado com sucesso! Verifique seu email para confirmar sua conta. ${user._id}`,
     });
   } catch (error) {
     console.log("Error during signup:", error.message);
@@ -121,6 +129,49 @@ router.post("/signup", async (req, res) => {
       message: "Um erro ocorreu ao criar novo usuário",
       error: error.message,
     });
+  }
+});
+
+// rota para mandar codigo de verificação por email
+
+// rota para mandar codigo de verificação por telefone
+
+// resendVerificationByPhone
+router.post("/sendVerificationByPhone", async (req, res) => {
+  console.log("route for sending a verification by SMS...");
+
+  const { userId } = req.body;
+  console.log(userId)
+
+  // gerar o token
+  // Generate verification token
+  const token = crypto.randomBytes(32).toString("hex");
+  console.log("Generated verification token:", token);
+
+  try {
+    if (!token) return res.status(400).json({ message: "Token ausente." });
+
+    const user = await User.findById(userId);
+    if (!user)
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    if (!user.phone)
+      return res
+        .status(400)
+        .json({ message: "Usuário não forneceu telefone." });
+
+    // Gerar novo token
+    const newToken = crypto.randomBytes(32).toString("hex");
+    user.verificationToken = newToken;
+    await user.save();
+
+    const smsMessage = `Seu link de verificação: ${process.env.EMAIL_VERIFICATION_URL}?token=${newToken}`;
+
+    await sendVerificationSMS(user.phone.toString(), smsMessage);
+
+    return res.status(200).json({ message: "Novo link enviado por SMS." });
+  } catch (error) {
+    console.error("Erro ao reenviar verificação por SMS:", error);
+    return res.status(500).json({ message: "Erro interno ao reenviar." });
   }
 });
 
@@ -157,6 +208,74 @@ router.get("/verifyAccount/:token", async (req, res) => {
     res
       .status(500)
       .json({ message: "Erro ao verificar a conta.", error: error.message });
+  }
+});
+
+router.post("/sendVerificationByEmail", async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ message: "ID do usuário não fornecido." });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    const email = user.email;
+    if (!email) {
+      return res.status(400).json({ message: "Usuário não possui e-mail cadastrado." });
+    }
+
+    // Gerar novo token de verificação
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    user.verificationToken = verificationToken;
+    await user.save();
+
+    const verificationUrl = `${process.env.EMAIL_VERIFICATION_URL}?token=${verificationToken}`;
+
+    console.log("Sending verification link to email:", email);
+
+    // Função que envia o email
+    await sendVerificationLink(email, verificationUrl);
+
+    res.status(200).json({
+      message: `Link de verificação enviado para ${email}.`,
+    });
+  } catch (error) {
+    console.error("Erro ao enviar link de verificação por email:", error);
+    res.status(500).json({ message: "Erro ao enviar link de verificação por email." });
+  }
+});
+
+
+// resendVerificationByEmail
+router.post("/resendVerificationByEmail", async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    if (!token) return res.status(400).json({ message: "Token ausente." });
+
+    const user = await User.findOne({ verificationToken: token });
+    if (!user)
+      return res.status(404).json({ message: "Usuário não encontrado." });
+
+    // Gerar novo token
+    const newToken = crypto.randomBytes(32).toString("hex");
+    user.verificationToken = newToken;
+    await user.save();
+
+    const verificationLink = `${process.env.EMAIL_VERIFICATION_URL}?token=${newToken}`;
+
+    // await sendVerificationEmail(user.email, verificationLink);
+    await sendVerificationLink(email, verificationLink);
+
+    return res.status(200).json({ message: "Novo link enviado por e-mail." });
+  } catch (error) {
+    console.error("Erro ao reenviar verificação por email:", error);
+    return res.status(500).json({ message: "Erro interno ao reenviar." });
   }
 });
 
@@ -373,8 +492,8 @@ router.post("/forgotPassword", async (req, res) => {
     console.log(`Sending password reset link to email: ${email}`);
 
     // create the reset link with the token as a query parameter
-    // const resetLink = `http://localhost:3000/passwordReset?token=${resetToken}`
-    const resetLink = `https://cristaosbackend.onrender.com/passwordReset?token=${resetToken}`;
+    const resetLink = `${process.env.RESET_PASSWORD_LINK}${resetToken}`;
+    // const resetLink = `https://cristaosbackend.onrender.com/passwordReset?token=${resetToken}`;
 
     // Send reset token to the user's email
     await sendResetLink(email, resetLink);
