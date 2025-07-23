@@ -10,6 +10,7 @@ const {
 const mongoose = require("mongoose");
 const User = require("../models/Usuario");
 const Notification = require("../models/Notification");
+const Message = require("../models/Message")
 const Listing = require("../models/Listing");
 const Comment = require("../models/Comment");
 const { protect } = require("../utils/auth");
@@ -217,6 +218,47 @@ router.post("/sendVerificationByPhone", async (req, res) => {
   }
 });
 
+// rota para reenviar código de verificação por email usando o email do usuário
+router.post("/resendVerificationEmail", async (req, res) => {
+  console.log("Rota: resendVerificationEmail");
+
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: "Email não fornecido." });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ message: "Conta já está verificada." });
+    }
+
+    // Gerar novo token
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    user.verificationToken = verificationToken;
+    await user.save();
+
+    const verificationUrl = `${process.env.VERIFICATION_URL}${verificationToken}`;
+    console.log("Reenviando link de verificação para:", email);
+
+    await sendVerificationLink(email, verificationUrl);
+
+    res.status(200).json({
+      message: `Novo link de verificação enviado para ${email}.`,
+    });
+  } catch (error) {
+    console.error("Erro ao reenviar verificação:", error);
+    res.status(500).json({ message: "Erro ao reenviar verificação." });
+  }
+});
+
+
 // Verify Account
 // Verify Account Route
 router.get("/verifyAccount/:token", async (req, res) => {
@@ -255,7 +297,7 @@ router.get("/verifyAccount/:token", async (req, res) => {
 
 
 
-// resendVerificationByEmail
+// resendVerificationByEmail NAO EM USO
 router.post("/resendVerificationByEmail", async (req, res) => {
   const { token } = req.body;
 
@@ -896,5 +938,42 @@ router.get("/:userId/friends", async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 });
+
+
+// route for main chat
+router.get("/checkUnreadMainChat", protect, async (req, res) => {
+  console.log("🟢🟢🟢 checking for unread messages route...")
+  try {
+    const user = await User.findById(req.user._id);
+    const lastSeen = user.lastMainChatRead || new Date(0); // se nunca viu, considera tudo como novo
+
+    const count = await Message.countDocuments({
+      roomId: "mainChatRoom", // ou o ID específico que você usa
+      timestamp: { $gt: lastSeen },
+    });
+
+    res.status(200).json({ count });
+  } catch (error) {
+    console.error("Erro ao buscar mensagens não lidas:", error);
+    res.status(500).json({ message: "Erro ao verificar mensagens." });
+  }
+});
+
+
+router.post("/markMainChatAsRead", protect, async (req, res) => {
+  console.log("markMainChatAsRead route reached")
+
+  try {
+    const user = await User.findById(req.user._id);
+    user.lastMainChatRead = new Date();
+    await user.save();
+
+    res.status(200).json({ message: "Último acesso ao chat registrado." });
+  } catch (error) {
+    console.error("Erro ao atualizar leitura:", error);
+    res.status(500).json({ message: "Erro ao marcar como lido." });
+  }
+});
+
 
 module.exports = router;

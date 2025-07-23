@@ -83,6 +83,13 @@ const userSchema = new mongoose.Schema(
         ref: "User",
       },
     ],
+
+    // main chat read
+    lastMainChatRead: {
+      type: Date,
+      default: null,
+    },
+    
   },
   { timestamps: true }
 ); // Automatically adds `createdAt` and `updatedAt` fields

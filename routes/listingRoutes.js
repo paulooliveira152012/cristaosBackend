@@ -16,7 +16,7 @@ router.get("/alllistings", async (req, res) => {
     );
 
     // Log the listings to verify they contain user data
-    console.log("Listings fetched:", listings);
+    // console.log("Listings fetched:", listings);
 
     res.status(200).json({ listings });
   } catch (error) {
