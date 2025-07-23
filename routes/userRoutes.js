@@ -67,7 +67,7 @@ router.post("/signup", async (req, res) => {
     phone,
     password,
     profileImage,
-    isVerified: true
+    isVerified: true,
   });
 
   try {
@@ -110,9 +110,9 @@ router.post("/signup", async (req, res) => {
 
     return res.status(201).json({
       message: `Usuário criado com sucesso! Verifique seu email para confirmar sua conta. ${user._id}`,
-      userId: user._id
-    })
-  
+      userId: user._id,
+    });
+
     // qualquer coisa remova esse return
     return;
     console.log("Sending verification link to email:", email);
@@ -142,7 +142,7 @@ router.post("/sendVerificationByPhone", async (req, res) => {
   console.log("route for sending a verification by SMS...");
 
   const { userId } = req.body;
-  console.log(userId)
+  console.log(userId);
 
   // gerar o token
   // Generate verification token
@@ -227,7 +227,9 @@ router.post("/sendVerificationByEmail", async (req, res) => {
 
     const email = user.email;
     if (!email) {
-      return res.status(400).json({ message: "Usuário não possui e-mail cadastrado." });
+      return res
+        .status(400)
+        .json({ message: "Usuário não possui e-mail cadastrado." });
     }
 
     // Gerar novo token de verificação
@@ -247,10 +249,11 @@ router.post("/sendVerificationByEmail", async (req, res) => {
     });
   } catch (error) {
     console.error("Erro ao enviar link de verificação por email:", error);
-    res.status(500).json({ message: "Erro ao enviar link de verificação por email." });
+    res
+      .status(500)
+      .json({ message: "Erro ao enviar link de verificação por email." });
   }
 });
-
 
 // resendVerificationByEmail
 router.post("/resendVerificationByEmail", async (req, res) => {
@@ -330,9 +333,10 @@ router.post("/login", async (req, res) => {
     }
 
     if (!user.password) {
-      return res.status(403).json({ 
-        message: "Essa conta foi criada com o login do Google. Por favor, use 'Entrar com Google' ou clique em 'Esqueci minha senha' para definir uma senha." 
-      })
+      return res.status(403).json({
+        message:
+          "Essa conta foi criada com o login do Google. Por favor, use 'Entrar com Google' ou clique em 'Esqueci minha senha' para definir uma senha.",
+      });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -639,13 +643,20 @@ router.put("/update/:id", async (req, res) => {
     }
 
     // ✅ Validar número de telefone, se estiver sendo atualizado
-    if (updates.phone !== undefined) {
+    if (
+      updates.phone !== undefined &&
+      updates.phone !== null &&
+      updates.phone !== ""
+    ) {
       const phoneStr = updates.phone.toString();
       if (!/^\d{8,15}$/.test(phoneStr)) {
         return res
           .status(400)
           .json({ error: "Número de telefone inválido. Use apenas números." });
       }
+    } else {
+      // remove o campo para evitar validação indevida
+      delete updates.phone;
     }
 
     const updatedUser = await User.findByIdAndUpdate(
