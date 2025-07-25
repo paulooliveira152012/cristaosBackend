@@ -6,6 +6,24 @@ const Conversation = require("../models/Conversation");
 const Notification = require("../models/Notification")
 const createNotification = require("../utils/notificationUtils");
 
+
+// get dm chats from user
+// GET /api/dm/userConversations/:userId
+router.get("/userConversations/:userId", async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const conversations = await Conversation.find({
+      participants: userId,
+    }).populate("participants", "username profileImage");
+
+    res.status(200).json(conversations);
+  } catch (err) {
+    console.error("Erro ao buscar conversas:", err);
+    res.status(500).json({ error: "Erro ao buscar conversas" });
+  }
+});
+
 // 1. Send chat request
 // 1. Send chat request
 router.post("/sendChatRequest", async (req, res) => {

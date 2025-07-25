@@ -941,21 +941,36 @@ router.get("/:userId/friends", async (req, res) => {
 // route for main chat
 router.get("/checkUnreadMainChat", protect, async (req, res) => {
   console.log("🟢🟢🟢 checking for unread messages route...");
+
   try {
     const user = await User.findById(req.user._id);
-    const lastSeen = user.lastMainChatRead || new Date(0); // se nunca viu, considera tudo como novo
+    const lastSeen = user.lastMainChatRead || new Date(0);
 
+    // Conta mensagens enviadas por OUTRAS pessoas após o último visto
     const count = await Message.countDocuments({
-      roomId: "mainChatRoom", // ou o ID específico que você usa
+      roomId: "mainChatRoom",
       timestamp: { $gt: lastSeen },
+      userId: { $ne: req.user._id },
     });
 
-    res.status(200).json({ count });
+    // Pega a última mensagem do main chat
+    const lastMessage = await Message.findOne({
+      roomId: "mainChatRoom",
+    })
+      .sort({ timestamp: -1 })
+      .select("userId")
+      .lean();
+
+    res.json({
+      count,
+      lastMessageUserId: lastMessage?.userId?.toString() || null,
+    });
   } catch (error) {
     console.error("Erro ao buscar mensagens não lidas:", error);
     res.status(500).json({ message: "Erro ao verificar mensagens." });
   }
 });
+
 
 router.post("/markMainChatAsRead", protect, async (req, res) => {
   console.log("markMainChatAsRead route reached");
