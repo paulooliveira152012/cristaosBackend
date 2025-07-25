@@ -7,6 +7,7 @@ const rooms = require('./rooms')
 const adminRoutes = require('./adminRoutes')
 const uploadImageRoute = require('./upload-url'); 
 const notifications = require('./notifications')
+const messagesRoutes = require('./messages')
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.use('/comments', commentRoutes);
 router.use('/polls', pollRoutes);
 router.use('/rooms', rooms);
 router.use('/adm', adminRoutes);
+router.use('/dm', messagesRoutes)
 router.use('/', uploadImageRoute)
 
 module.exports = router;

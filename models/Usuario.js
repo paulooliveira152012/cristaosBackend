@@ -84,6 +84,23 @@ const userSchema = new mongoose.Schema(
       },
     ],
 
+    // chat requests
+    chatRequestsSent: [
+      { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: "User" 
+      }
+    ],
+
+    // pending chat requests
+    chatRequestsReceived: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+      }
+    ],
+
+    
     // main chat read
     lastMainChatRead: {
       type: Date,
