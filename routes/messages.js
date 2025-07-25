@@ -3,6 +3,7 @@ const express = require("express");
 const router = express.Router();
 const User = require("../models/Usuario");
 const Conversation = require("../models/Conversation");
+const Notification = require("../models/Notification")
 const createNotification = require("../utils/notificationUtils");
 
 // 1. Send chat request
@@ -49,9 +50,11 @@ router.post("/rejectChatRequest", async (req, res) => {
     return res.status(400).json({ error: "Missing requester or requested ID" });
 
   try {
+    // remover pedido da lista de chatRequestsSent do usuario que enviou o convite
     await User.findByIdAndUpdate(requester, {
       $pull: { chatRequestsSent: requested },
     });
+    // remover pedido da lista de chatRequestsSent do usuario que recebeu o convite
     await User.findByIdAndUpdate(requested, {
       $pull: { chatRequestsReceived: requester },
     });
@@ -64,33 +67,44 @@ router.post("/rejectChatRequest", async (req, res) => {
 
 // 3. Accept chat request and start conversation
 router.post("/startNewConversation", async (req, res) => {
-  const { requester, requested } = req.body;
+  console.log("starting new conversation...")
+  const { requester, requested, notificationId } = req.body;
+  console.log(`requester: ${requester}, requested: ${requested}`)
   if (!requester || !requested)
-    return res.status(400).json({ error: "Missing requester or requested ID" });
+  return res.status(400).json({ error: "Missing requester or requested ID" });
+  console.log(`requester: ${requester}, requested: ${requested}`)
 
   try {
     const userRequested = await User.findById(requested);
     if (!userRequested.chatRequestsReceived.includes(requester)) {
+      console.log("Chat request not found")
       return res.status(403).json({ error: "Chat request not accepted yet" });
     }
 
     const existingConversation = await Conversation.findOne({
       participants: { $all: [requester, requested], $size: 2 },
     });
-    if (existingConversation)
+    if (existingConversation) {
+      console.log("Conversation already exists")
       return res.status(200).json({ message: "Conversation already exists", conversation: existingConversation });
+    }
 
     const newConversation = await Conversation.create({
       participants: [requester, requested],
     });
 
+    console.log("removing request from requester...")
     await User.findByIdAndUpdate(requester, {
       $pull: { chatRequestsSent: requested },
     });
+    console.log("removing request from requested")
     await User.findByIdAndUpdate(requested, {
       $pull: { chatRequestsReceived: requester },
     });
+    console.log("removing notification...")
+    await Notification.findByIdAndDelete(notificationId)
 
+    console.log("conversation started!")
     res.status(201).json({ message: "Conversation started", conversation: newConversation });
   } catch (error) {
     console.error("Error starting conversation:", error);
