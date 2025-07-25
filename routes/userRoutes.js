@@ -10,9 +10,9 @@ const {
 const mongoose = require("mongoose");
 const User = require("../models/Usuario");
 const Notification = require("../models/Notification");
-const DirectMessageRequest = require("../models/DirectMessage")
-const Conversation = require("../models/Conversation")
-const Message = require("../models/Message")
+const DirectMessageRequest = require("../models/DirectMessage");
+const Conversation = require("../models/Conversation");
+const Message = require("../models/Message");
 const Listing = require("../models/Listing");
 const Comment = require("../models/Comment");
 const { protect } = require("../utils/auth");
@@ -138,7 +138,7 @@ router.post("/signup", async (req, res) => {
 
 // rota para mandar codigo de verificação por email
 router.post("/sendVerificationByEmail", async (req, res) => {
-  console.log("route: send email verification")
+  console.log("route: send email verification");
   try {
     const { userId } = req.body;
 
@@ -260,7 +260,6 @@ router.post("/resendVerificationEmail", async (req, res) => {
   }
 });
 
-
 // Verify Account
 // Verify Account Route
 router.get("/verifyAccount/:token", async (req, res) => {
@@ -296,8 +295,6 @@ router.get("/verifyAccount/:token", async (req, res) => {
       .json({ message: "Erro ao verificar a conta.", error: error.message });
   }
 });
-
-
 
 // resendVerificationByEmail NAO EM USO
 router.post("/resendVerificationByEmail", async (req, res) => {
@@ -941,10 +938,9 @@ router.get("/:userId/friends", async (req, res) => {
   }
 });
 
-
 // route for main chat
 router.get("/checkUnreadMainChat", protect, async (req, res) => {
-  console.log("🟢🟢🟢 checking for unread messages route...")
+  console.log("🟢🟢🟢 checking for unread messages route...");
   try {
     const user = await User.findById(req.user._id);
     const lastSeen = user.lastMainChatRead || new Date(0); // se nunca viu, considera tudo como novo
@@ -961,9 +957,8 @@ router.get("/checkUnreadMainChat", protect, async (req, res) => {
   }
 });
 
-
 router.post("/markMainChatAsRead", protect, async (req, res) => {
-  console.log("markMainChatAsRead route reached")
+  console.log("markMainChatAsRead route reached");
 
   try {
     const user = await User.findById(req.user._id);
@@ -976,99 +971,5 @@ router.post("/markMainChatAsRead", protect, async (req, res) => {
     res.status(500).json({ message: "Erro ao marcar como lido." });
   }
 });
-
-// POST /api/chat/sendChatRequest
-router.post("/sendChatRequest", async (req, res) => {
-  const { requester, requested } = req.body;
-
-  if (!requester || !requested) {
-    return res.status(400).json({ error: "Missing requester or requested user ID" });
-  }
-
-  try {
-    const sender = await User.findById(requester);
-    const receiver = await User.findById(requested);
-
-    if (!sender || !receiver) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    // Verifica se já foi enviado
-    if (
-      sender.chatRequestsSent.includes(requested) ||
-      receiver.chatRequestsReceived.includes(requester)
-    ) {
-      return res.status(400).json({ error: "Chat request already sent" });
-    }
-
-    // Adiciona o request
-    sender.chatRequestsSent.push(requested);
-    receiver.chatRequestsReceived.push(requester);
-
-    await sender.save();
-    await receiver.save();
-
-    res.status(200).json({ message: "Chat request sent" });
-  } catch (error) {
-    console.error("Error sending chat request:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-
-// initiate private chat
-// POST /api/chat/startNewConversation
-router.post("/startNewConversation", async (req, res) => {
-  console.log("🟢 Direct message request route reached")
-  const { requester, requested } = req.body;
-
-  console.log(`🟢🟢 requester: ${requester} solicitou DM com ${requested}`)
-
-  if (!requester || !requested) {
-    console.log("🟢🟢Faltando requester ou requested")
-    return res.status(400).json({ error: "Missing requester or requested user ID" });
-  }
-
-  try {
-    // Verifica se o pedido foi aceito (optional)
-    const userRequested = await User.findById(requested);
-    if (!userRequested.chatRequestsReceived.includes(requester)) {
-      console.log("🟢🟢🟢Chat request not accepted yet")
-      return res.status(403).json({ error: "Chat request not accepted yet" });
-    }
-
-    // Verifica se já existe uma conversa entre eles
-    const existingConversation = await Conversation.findOne({
-      participants: { $all: [requester, requested], $size: 2 },
-    });
-
-    if (existingConversation) {
-      console.log("🟢🟢🟢Conversation already exists")
-      return res.status(200).json({ message: "Conversation already exists", conversation: existingConversation });
-    }
-
-    // Cria nova conversa
-    const newConversation = await Conversation.create({
-      participants: [requester, requested],
-    });
-
-    // Remove o request de ambas as listas dos usuários
-    console.log("🟢🟢🟢🟢removendo o request de ambas as partes...")
-    await User.findByIdAndUpdate(requester, {
-      $pull: { chatRequestsSent: requested },
-    });
-    await User.findByIdAndUpdate(requested, {
-      $pull: { chatRequestsReceived: requester },
-    });
-
-    console.log("🟢🟢🟢🟢🟢 retornando... Conversation started ")
-
-    res.status(201).json({ message: "Conversation started", conversation: newConversation });
-  } catch (error) {
-    console.error("Error creating conversation:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
 
 module.exports = router;
