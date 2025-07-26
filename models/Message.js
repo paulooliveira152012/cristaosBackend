@@ -2,9 +2,9 @@ const mongoose = require("mongoose");
 
 const messageSchema = new mongoose.Schema({
   roomId: {
-    type: mongoose.Schema.Types.Mixed, // Allows ObjectId or String
+    type: mongoose.Schema.Types.Mixed,
     required: false,
-  }, // Room ID can now be an ObjectId for regular rooms or a string for special rooms like 'mainChatRoom'
+  },
   conversationId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Conversation",
@@ -14,7 +14,12 @@ const messageSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true,
-  }, // Reference to the user who sent the message
+  }, // quem enviou
+  receiver: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: false, // só obrigatório em DMs
+  },
   username: {
     type: String,
     required: true,
@@ -27,13 +32,17 @@ const messageSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  read: {
+    type: Boolean,
+    default: false,
+  },
   timestamp: {
     type: Date,
-    default: Date.now, // Automatically set the timestamp to the current date and time
+    default: Date.now,
   },
 });
 
-// validação custom: precisa ter roomId OU conversationId
+// precisa de roomId ou conversationId
 messageSchema.pre("validate", function (next) {
   if (!this.roomId && !this.conversationId) {
     return next(new Error("A mensagem precisa de roomId ou conversationId."));

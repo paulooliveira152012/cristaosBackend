@@ -1,5 +1,6 @@
 const Message = require('../models/Message');
 const Usuario = require("../models/Usuario")
+const Conversation = require('../models/Conversation')
 
 
 
@@ -90,25 +91,31 @@ const emitChatHistoryWhenMinimized = async (socket, roomId) => {
 };
 
 // dm messaging
+// dm messaging
 const handleSendPrivateMessage = async (io, socket, data) => {
   const { conversationId, sender, message } = data;
-
-  console.log(conversationId, sender, message)
 
   try {
     const user = await Usuario.findById(sender).select("username profileImage");
     if (!user) throw new Error("Usuário não encontrado");
 
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) throw new Error("Conversa não encontrada");
+
+    // pega o outro participante (o receiver)
+    const receiver = conversation.participants.find(
+      (participantId) => participantId.toString() !== sender
+    );
+
     const newMsg = new Message({
       conversationId,
       userId: sender,
+      receiver, // 👈 novo campo adicionado
       username: user.username,
       profileImage: user.profileImage,
       message,
       timestamp: new Date(),
     });
-
-    console.log(newMsg)
 
     await newMsg.save();
 
@@ -116,6 +123,7 @@ const handleSendPrivateMessage = async (io, socket, data) => {
       _id: newMsg._id,
       conversationId,
       sender,
+      receiver, // <- opcional, mas pode ajudar no front
       message,
       username: user.username,
       profileImage: user.profileImage,

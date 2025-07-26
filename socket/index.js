@@ -442,5 +442,11 @@ module.exports = function (io) {
     socket.on("sendPrivateMessage", (data) => {
       handleSendPrivateMessage(io, socket, data);
     });
+
+     socket.on("privateChatRead", ({ conversationId, userId }) => {
+    // Envia esse evento apenas para o usuário em questão
+    io.to(userId.toString()).emit("privateChatRead", { conversationId, userId });
+  });
+  
   });
 };

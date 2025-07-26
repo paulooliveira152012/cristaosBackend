@@ -29,7 +29,9 @@ router.get("/userConversations/:userId", async (req, res) => {
         const unreadCount = await Message.countDocuments({
           conversationId: chat._id,
           timestamp: { $gt: lastRead },
-          userId: { $ne: userId }, // só conta mensagens de outros usuários
+          sender: { $ne: userId }, // ✅ Corrigido aqui
+          receiver: userId, // ✅ Só mensagens destinadas a ele
+          read: false, // ✅ Só não lidas
         });
 
         return {
@@ -174,35 +176,37 @@ router.get("/chatRequests/:userId", async (req, res) => {
   }
 });
 
-// Marcar como lida uma conversa privada
-router.post("/markAsRead/:conversationId", protect, async (req, res) => {
-  const userId = req.user._id;
-  const { conversationId } = req.params;
-  console.log("🔐 Headers recebidos:", req.headers);
+// // Marcar como lida uma conversa privada
+// router.post("/markAsRead/:conversationId", protect, async (req, res) => {
+//   const userId = req.user._id;
+//   const { conversationId } = req.params;
+//   console.log("🔐 Headers recebidos:", req.headers);
 
-  try {
-    const user = await User.findById(userId);
+//   try {
+//     const user = await User.findById(userId);
 
-    if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
+//     if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
 
-    // Atualiza o timestamp de leitura para a conversa específica
-    user.lastReadTimestamps.set(conversationId, new Date());
+//     // Atualiza o timestamp de leitura para a conversa específica
+//     user.lastReadTimestamps.set(conversationId, new Date());
 
-    await user.save();
+//     await user.save();
 
-    res.status(200).json({ message: "Conversa marcada como lida." });
-  } catch (err) {
-    console.error("Erro ao marcar como lida:", err);
-    res.status(500).json({ error: "Erro ao marcar como lida." });
-  }
-});
+//     res.status(200).json({ message: "Conversa marcada como lida." });
+//   } catch (err) {
+//     console.error("Erro ao marcar como lida:", err);
+//     res.status(500).json({ error: "Erro ao marcar como lida." });
+//   }
+// });
 
 // Buscar mensagens de uma conversa
 router.get("/messages/:conversationId", protect, async (req, res) => {
   const { conversationId } = req.params;
 
   try {
-    const messages = await Message.find({ conversationId }).sort({ timestamp: 1 });
+    const messages = await Message.find({ conversationId }).sort({
+      timestamp: 1,
+    });
     res.status(200).json(messages);
   } catch (err) {
     console.error("Erro ao buscar mensagens:", err);
@@ -210,5 +214,50 @@ router.get("/messages/:conversationId", protect, async (req, res) => {
   }
 });
 
+// Marcar mensagens como lidas e retornar total de não lidas
+router.post("/markAsRead/:conversationId", protect, async (req, res) => {
+  console.log("marking messages as read");
+
+  const userId = req.user._id;
+  const { conversationId } = req.params;
+
+  try {
+    // 1. Marcar mensagens da conversa atual como lidas
+    await Message.updateMany(
+      { conversationId, receiver: userId, read: false },
+      { $set: { read: true } }
+    );
+
+    // Atualiza o timestamp da última leitura para essa conversa
+    await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          [`lastReadTimestamps.${conversationId}`]: new Date(),
+        },
+      },
+      { new: true }
+    );
+
+    // 2. Buscar todas conversas do usuário
+    const conversations = await Conversation.find({ participants: userId });
+
+    // 3. Pegar os IDs das conversas
+    const conversationIds = conversations.map((c) => c._id);
+
+    // 4. Contar total de mensagens não lidas em todas as conversas
+    const totalUnread = await Message.countDocuments({
+      conversationId: { $in: conversationIds },
+      receiver: userId,
+      read: false,
+    });
+
+    console.log("totalUnread:", totalUnread);
+    return res.status(200).json({ totalUnread });
+  } catch (err) {
+    console.error("Erro ao marcar mensagens como lidas:", err);
+    return res.status(500).json({ error: "Erro interno ao marcar como lida" });
+  }
+});
 
 module.exports = router;
