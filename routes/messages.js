@@ -260,4 +260,26 @@ router.post("/markAsRead/:conversationId", protect, async (req, res) => {
   }
 });
 
+// buscar totalUnread messages
+router.get("/totalUnread/:userId", async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const conversations = await Conversation.find({ participants: userId });
+    const conversationIds = conversations.map((c) => c._id);
+
+    const totalUnread = await Message.countDocuments({
+      conversationId: { $in: conversationIds },
+      userId: { $ne: userId }, // só conta mensagens de outros usuários
+      read: false,
+    });
+
+    return res.status(200).json({ totalUnread });
+  } catch (err) {
+    console.error("Erro ao contar mensagens não lidas:", err);
+    return res.status(500).json({ error: "Erro interno" });
+  }
+});
+
+
 module.exports = router;
