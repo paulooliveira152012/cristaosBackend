@@ -3,9 +3,10 @@ const express = require("express");
 const router = express.Router();
 const User = require("../models/Usuario");
 const Conversation = require("../models/Conversation");
-const Message = require("../models/Message")
+const Message = require("../models/Message");
 const Notification = require("../models/Notification");
 const createNotification = require("../utils/notificationUtils");
+const { protect } = require("../utils/auth");
 
 // get dm chats from user
 // GET /api/dm/userConversations/:userId
@@ -126,12 +127,10 @@ router.post("/startNewConversation", async (req, res) => {
     });
     if (existingConversation) {
       console.log("Conversation already exists");
-      return res
-        .status(200)
-        .json({
-          message: "Conversation already exists",
-          conversation: existingConversation,
-        });
+      return res.status(200).json({
+        message: "Conversation already exists",
+        conversation: existingConversation,
+      });
     }
 
     const newConversation = await Conversation.create({
@@ -175,11 +174,11 @@ router.get("/chatRequests/:userId", async (req, res) => {
   }
 });
 
-
 // Marcar como lida uma conversa privada
-router.post("/markAsRead/:conversationId", async (req, res) => {
+router.post("/markAsRead/:conversationId", protect, async (req, res) => {
   const userId = req.user._id;
   const { conversationId } = req.params;
+  console.log("🔐 Headers recebidos:", req.headers);
 
   try {
     const user = await User.findById(userId);
@@ -187,10 +186,7 @@ router.post("/markAsRead/:conversationId", async (req, res) => {
     if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
 
     // Atualiza o timestamp de leitura para a conversa específica
-    user.lastReadTimestamps = {
-      ...user.lastReadTimestamps,
-      [conversationId]: new Date(),
-    };
+    user.lastReadTimestamps.set(conversationId, new Date());
 
     await user.save();
 
@@ -200,5 +196,19 @@ router.post("/markAsRead/:conversationId", async (req, res) => {
     res.status(500).json({ error: "Erro ao marcar como lida." });
   }
 });
+
+// Buscar mensagens de uma conversa
+router.get("/messages/:conversationId", protect, async (req, res) => {
+  const { conversationId } = req.params;
+
+  try {
+    const messages = await Message.find({ conversationId }).sort({ timestamp: 1 });
+    res.status(200).json(messages);
+  } catch (err) {
+    console.error("Erro ao buscar mensagens:", err);
+    res.status(500).json({ error: "Erro ao buscar mensagens" });
+  }
+});
+
 
 module.exports = router;

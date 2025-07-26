@@ -1,4 +1,7 @@
 const Message = require('../models/Message');
+const Usuario = require("../models/Usuario")
+
+
 
 // Emit chat history for a specific room
 const emitChatHistory = async (socket, roomId) => {
@@ -86,9 +89,49 @@ const emitChatHistoryWhenMinimized = async (socket, roomId) => {
   }
 };
 
+// dm messaging
+const handleSendPrivateMessage = async (io, socket, data) => {
+  const { conversationId, sender, message } = data;
+
+  console.log(conversationId, sender, message)
+
+  try {
+    const user = await Usuario.findById(sender).select("username profileImage");
+    if (!user) throw new Error("Usuário não encontrado");
+
+    const newMsg = new Message({
+      conversationId,
+      userId: sender,
+      username: user.username,
+      profileImage: user.profileImage,
+      message,
+      timestamp: new Date(),
+    });
+
+    console.log(newMsg)
+
+    await newMsg.save();
+
+    io.to(conversationId).emit("newPrivateMessage", {
+      _id: newMsg._id,
+      conversationId,
+      sender,
+      message,
+      username: user.username,
+      profileImage: user.profileImage,
+      timestamp: newMsg.timestamp,
+    });
+  } catch (err) {
+    console.error("❌ Erro ao enviar mensagem privada:", err);
+    socket.emit("error", { message: "Erro ao enviar mensagem privada." });
+  }
+};
+
+
 module.exports = {
   emitChatHistory,
   handleSendMessage,
   handleDeleteMessage,
   emitChatHistoryWhenMinimized, // Add this function for minimized room chat history
+  handleSendPrivateMessage
 };

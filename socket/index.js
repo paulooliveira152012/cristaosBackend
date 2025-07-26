@@ -9,6 +9,7 @@ const {
   emitChatHistory,
   handleSendMessage,
   handleDeleteMessage,
+  handleSendPrivateMessage,
 } = require("./chatMessages");
 
 const {
@@ -395,31 +396,51 @@ module.exports = function (io) {
       socket.emit("onlineUsers", users);
     });
 
-  socket.on("disconnect", async () => {
-  console.log("disconnect socket called");
-  const userId = removeUser(socket.id); // Agora retorna o ID
+    socket.on("disconnect", async () => {
+      console.log("disconnect socket called");
+      const userId = removeUser(socket.id); // Agora retorna o ID
 
-  if (userId) {
-    console.log(`👋 Desconectado: ${userId}`);
+      if (userId) {
+        console.log(`👋 Desconectado: ${userId}`);
 
-    for (const roomId of Object.keys(liveRoomUsers)) {
-      await removeUserFromRoom(roomId, userId);
+        for (const roomId of Object.keys(liveRoomUsers)) {
+          await removeUserFromRoom(roomId, userId);
 
-      // ✅ Atualiza e já recebe o documento atualizado
-      const room = await removeUserFromRoomDB(roomId, userId);
+          // ✅ Atualiza e já recebe o documento atualizado
+          const room = await removeUserFromRoomDB(roomId, userId);
 
-      emitLiveRoomUsers(io, roomId);
-      io.to(roomId).emit("userLeft", { userId });
+          emitLiveRoomUsers(io, roomId);
+          io.to(roomId).emit("userLeft", { userId });
 
-      // ✅ Atualiza a lista de speakers no frontend
-      if (room) {
-        io.to(roomId).emit("updateSpeakers", room.currentUsersSpeaking || []);
+          // ✅ Atualiza a lista de speakers no frontend
+          if (room) {
+            io.to(roomId).emit(
+              "updateSpeakers",
+              room.currentUsersSpeaking || []
+            );
+          }
+        }
+
+        emitOnlineUsers(io);
       }
-    }
+    });
 
-    emitOnlineUsers(io);
-  }
-});
+    // directMessaging
+    // Usuário entra numa conversa privada
+    socket.on("joinPrivateChat", (conversationId) => {
+      socket.join(conversationId);
+      console.log(`🟢 Entrou na conversa privada: ${conversationId}`);
+    });
 
+    // Usuário sai
+    socket.on("leavePrivateChat", (conversationId) => {
+      socket.leave(conversationId);
+      console.log(`🔴 Saiu da conversa privada: ${conversationId}`);
+    });
+
+    // Enviar mensagem privada
+    socket.on("sendPrivateMessage", (data) => {
+      handleSendPrivateMessage(io, socket, data);
+    });
   });
 };
