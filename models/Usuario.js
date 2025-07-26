@@ -86,27 +86,31 @@ const userSchema = new mongoose.Schema(
 
     // chat requests
     chatRequestsSent: [
-      { 
-        type: mongoose.Schema.Types.ObjectId, 
-        ref: "User" 
-      }
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
     ],
 
     // pending chat requests
     chatRequestsReceived: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User"
-      }
+        ref: "User",
+      },
     ],
 
-    
     // main chat read
     lastMainChatRead: {
       type: Date,
       default: null,
     },
-    
+
+    lastReadTimestamps: {
+      type: Map,
+      of: Date,
+      default: {},
+    },
   },
   { timestamps: true }
 ); // Automatically adds `createdAt` and `updatedAt` fields
