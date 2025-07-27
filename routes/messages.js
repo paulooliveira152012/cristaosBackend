@@ -281,4 +281,37 @@ router.get("/totalUnread/:userId", async (req, res) => {
   }
 });
 
+// ROTA: sair de um chat privado (e deletar se ninguém mais estiver)
+router.delete("/leaveChat/:conversationId", protect, async (req, res) => {
+  console.log("rota deletar DM alcançada...")
+  const { conversationId } = req.params;
+  const { userId } = req.body;
+
+  try {
+    const conversation = await Conversation.findById(conversationId);
+
+    if (!conversation) {
+      return res.status(404).json({ error: "Conversa não encontrada" });
+    }
+
+    // Remove o usuário da conversa
+    conversation.participants = conversation.participants.filter(
+      (id) => id.toString() !== userId
+    );
+    
+
+    if (conversation.participants.length === 0) {
+      // Ninguém mais na conversa? Deleta!
+      await Conversation.findByIdAndDelete(conversationId);
+      return res.json({ message: "Conversa excluída (sem participantes restantes)." });
+    } else {
+      await conversation.save();
+      return res.json({ message: "Você saiu da conversa." });
+    }
+  } catch (err) {
+    console.error("Erro ao sair da conversa:", err);
+    res.status(500).json({ error: "Erro interno ao sair da conversa." });
+  }
+});
+
 module.exports = router;
