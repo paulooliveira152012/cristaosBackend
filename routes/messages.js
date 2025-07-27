@@ -329,9 +329,7 @@ router.delete("/leaveChat/:conversationId", protect, async (req, res) => {
     const io = req.app.get("io");
 
     if (io) {
-      conversation.participants.forEach((participantId) => {
-        io.to(participantId.toString()).emit("newPrivateMessage", fullSystemMsg);
-      });
+      io.to(conversationId).emit("newPrivateMessage", fullSystemMsg);
     }
 
     return res.json({ message: "Você saiu da conversa." });
