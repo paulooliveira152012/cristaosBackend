@@ -427,9 +427,12 @@ module.exports = function (io) {
 
     // directMessaging
     // Usuário entra numa conversa privada
-    socket.on("joinPrivateChat", (conversationId) => {
+    socket.on("joinPrivateChat", ({ conversationId, userId }) => {
+      `🟢🟢🟢🟢 conversationId: ${conversationId}, userId: ${userId}`
       socket.join(conversationId);
-      console.log(`🟢 Entrou na conversa privada: ${conversationId}`);
+      socket.join(userId.toString())
+
+      console.log(`🟢 ${userId} Entrou na conversa privada: ${conversationId}`);
     });
 
     // Usuário sai
