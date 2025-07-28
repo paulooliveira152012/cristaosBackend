@@ -334,6 +334,15 @@ router.delete("/leaveChat/:conversationId", protect, async (req, res) => {
           "newPrivateMessage",
           fullSystemMsg
         );
+
+        // Novo evento apenas para debug ou efeito específico
+        io.to(participantId.toString()).emit("userLeftPrivateChat", {
+          conversationId,
+          leftUser: {
+            id: req.user._id,
+            username: username,
+          },
+        });
       });
     }
 

@@ -428,17 +428,29 @@ module.exports = function (io) {
     // directMessaging
     // Usuário entra numa conversa privada
     socket.on("joinPrivateChat", ({ conversationId, userId }) => {
-      `🟢🟢🟢🟢 conversationId: ${conversationId}, userId: ${userId}`
+      `🟢🟢🟢🟢 conversationId: ${conversationId}, userId: ${userId}`;
       socket.join(conversationId);
-      socket.join(userId.toString())
+      socket.join(userId.toString());
 
       console.log(`🟢 ${userId} Entrou na conversa privada: ${conversationId}`);
     });
 
     // Usuário sai
-    socket.on("leavePrivateChat", (conversationId) => {
+    // Usuário sai da conversa privada
+    socket.on("leavePrivateChat", ({ conversationId, userId, username }) => {
       socket.leave(conversationId);
-      console.log(`🔴 Saiu da conversa privada: ${conversationId}`);
+      socket.leave(userId.toString());
+      console.log(`🔴 ${username} saiu da conversa privada: ${conversationId}`);
+
+      const systemMsg = {
+        system: true,
+        message: `${username} saiu da conversa.`,
+        conversationId,
+        timestamp: new Date(),
+      };
+
+      // Enviar para todos que ainda estão na sala
+      io.to(conversationId).emit("newPrivateMessage", systemMsg);
     });
 
     // Enviar mensagem privada
@@ -446,10 +458,12 @@ module.exports = function (io) {
       handleSendPrivateMessage(io, socket, data);
     });
 
-     socket.on("privateChatRead", ({ conversationId, userId }) => {
-    // Envia esse evento apenas para o usuário em questão
-    io.to(userId.toString()).emit("privateChatRead", { conversationId, userId });
-  });
-  
+    socket.on("privateChatRead", ({ conversationId, userId }) => {
+      // Envia esse evento apenas para o usuário em questão
+      io.to(userId.toString()).emit("privateChatRead", {
+        conversationId,
+        userId,
+      });
+    });
   });
 };
