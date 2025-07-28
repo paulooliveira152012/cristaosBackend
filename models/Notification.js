@@ -16,7 +16,8 @@ const notificationSchema = new mongoose.Schema(
         "reply", 
         "share",
         "friend_request_accepted", // ✅ adicione isso aqui
-        "chat_request" // <-- novo tipo mais semântico
+        "chat_request", // <-- novo tipo mais semântico
+        "chat_reinvite"
       ],
         
       required: true,

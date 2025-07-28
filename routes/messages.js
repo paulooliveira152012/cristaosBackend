@@ -109,26 +109,53 @@ router.post("/rejectChatRequest", async (req, res) => {
 });
 
 // 3. Accept chat request and start conversation
+// 3. Accept chat request and start conversation
 router.post("/startNewConversation", async (req, res) => {
-  console.log("starting new conversation...");
-  const { requester, requested, notificationId } = req.body;
-  console.log(`requester: ${requester}, requested: ${requested}`);
+  const { requester, requested, notificationId, conversationId } = req.body;
+
   if (!requester || !requested)
     return res.status(400).json({ error: "Missing requester or requested ID" });
-  console.log(`requester: ${requester}, requested: ${requested}`);
 
   try {
     const userRequested = await User.findById(requested);
     if (!userRequested.chatRequestsReceived.includes(requester)) {
-      console.log("Chat request not found");
       return res.status(403).json({ error: "Chat request not accepted yet" });
     }
 
+    // Se veio conversationId, é reinvite
+    if (conversationId) {
+      const conversation = await Conversation.findById(conversationId);
+      if (conversation) {
+        if (!conversation.participants.includes(requested)) {
+          conversation.participants.push(requested);
+        }
+
+        conversation.leavingUser = null;
+        await conversation.save();
+
+        await User.findByIdAndUpdate(requester, {
+          $pull: { chatRequestsSent: requested },
+        });
+        await User.findByIdAndUpdate(requested, {
+          $pull: { chatRequestsReceived: requester },
+        });
+        if (notificationId) {
+          await Notification.findByIdAndDelete(notificationId);
+        }
+
+        return res.status(200).json({
+          message: "Usuário reinserido na conversa existente",
+          conversation,
+        });
+      }
+    }
+
+    // Se não veio conversationId ou não encontrou, cria nova
     const existingConversation = await Conversation.findOne({
       participants: { $all: [requester, requested], $size: 2 },
     });
+
     if (existingConversation) {
-      console.log("Conversation already exists");
       return res.status(200).json({
         message: "Conversation already exists",
         conversation: existingConversation,
@@ -139,32 +166,28 @@ router.post("/startNewConversation", async (req, res) => {
       participants: [requester, requested],
     });
 
-    console.log("removing request from requester...");
     await User.findByIdAndUpdate(requester, {
       $pull: { chatRequestsSent: requested },
     });
-    console.log("removing request from requested");
     await User.findByIdAndUpdate(requested, {
       $pull: { chatRequestsReceived: requester },
     });
-    console.log("removing notification...");
-    await Notification.findByIdAndDelete(notificationId);
+    if (notificationId) {
+      await Notification.findByIdAndDelete(notificationId);
+    }
 
-    console.log("conversation started!");
-    res
-      .status(201)
-      .json({ message: "Conversation started", conversation: newConversation });
+    res.status(201).json({ message: "Conversation started", conversation: newConversation });
   } catch (error) {
     console.error("Error starting conversation:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
+
 // routes/directMessages.js
 
 router.post("/reinvite", protect, async (req, res) => {
   const { conversationId } = req.body;
-  const requester = req.user._id;
 
   try {
     const conversation = await Conversation.findById(conversationId);
@@ -175,6 +198,15 @@ router.post("/reinvite", protect, async (req, res) => {
 
     const requester = req.user._id;
     const requested = conversation.leavingUser;
+
+    //  // Garante que o usuário ainda não está na conversa
+    if (!conversation.participants.includes(requested)) {
+      conversation.participants.push(requested);
+    }
+
+     // Limpa o leavingUser
+    conversation.leavingUser = null;
+    await conversation.save();
 
     // Atualiza campos auxiliares de convite (opcional, se quiser rastrear)
     await User.findByIdAndUpdate(requester, {
@@ -191,12 +223,11 @@ router.post("/reinvite", protect, async (req, res) => {
     await createNotification({
       recipient: requested,
       fromUser: requester,
-      type: "chat_request",
+      type: "chat_reinvite",
       content: `${requesterObject.username} te convidou para uma conversa privada.`,
+      conversationId
     });
 
-    conversation.leavingUser = null;
-    await conversation.save();
 
     res.status(200).json({
       message: "Convite reenviado com sucesso",

@@ -7,6 +7,7 @@ const createNotification = async ({
   content,
   listingId,
   commentId = null,
+  conversatinId,
 }) => {
   try {
     if (recipient.toString() === fromUser.toString()) return; // não notifica a si mesmo
@@ -18,6 +19,7 @@ const createNotification = async ({
       content,
       listingId,
       commentId,
+      conversatinId
     });
 
     await newNotification.save();
