@@ -160,6 +160,54 @@ router.post("/startNewConversation", async (req, res) => {
   }
 });
 
+// routes/directMessages.js
+
+router.post("/reinvite", protect, async (req, res) => {
+  const { conversationId } = req.body;
+  const requester = req.user._id;
+
+  try {
+    const conversation = await Conversation.findById(conversationId);
+
+    if (!conversation || !conversation.leavingUser) {
+      return res.status(400).json({ error: "Nenhum usuário para reinvitar." });
+    }
+
+    const requester = req.user._id;
+    const requested = conversation.leavingUser;
+
+    // Atualiza campos auxiliares de convite (opcional, se quiser rastrear)
+    await User.findByIdAndUpdate(requester, {
+      $addToSet: { chatRequestsSent: requested },
+    });
+
+    await User.findByIdAndUpdate(requested, {
+      $addToSet: { chatRequestsReceived: requester },
+    });
+
+    const requesterObject = await User.findById(requester);
+
+    // 🔔 Reutiliza o mesmo tipo de notificação
+    await createNotification({
+      recipient: requested,
+      fromUser: requester,
+      type: "chat_request",
+      content: `${requesterObject.username} te convidou para uma conversa privada.`,
+    });
+
+    conversation.leavingUser = null;
+    await conversation.save();
+
+    res.status(200).json({
+      message: "Convite reenviado com sucesso",
+      toUserId: requested,
+    });
+  } catch (err) {
+    console.error("Erro ao reinvitar:", err);
+    res.status(500).json({ error: "Erro interno" });
+  }
+});
+
 // 4. Get received chat requests
 router.get("/chatRequests/:userId", async (req, res) => {
   const { userId } = req.params;
@@ -293,6 +341,8 @@ router.delete("/leaveChat/:conversationId", protect, async (req, res) => {
     if (!conversation) {
       return res.status(404).json({ error: "Conversa não encontrada" });
     }
+
+    conversation.leavingUser = userId;
 
     // Remove o usuário da conversa
     conversation.participants = conversation.participants.filter(
