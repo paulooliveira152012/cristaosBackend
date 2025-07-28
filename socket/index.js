@@ -27,6 +27,8 @@ const removeUserFromRoomDB = require("../utils/removeUserFromRoomDB");
 const Room = require("../models/Room");
 const User = require("../models/Usuario");
 
+const privateChatPresence = {}; // Ex: { conversationId: [userId1, userId2] }
+
 // wrapper para iniciar socket
 module.exports = function (io) {
   // liveUsers online globalmente
@@ -432,6 +434,32 @@ module.exports = function (io) {
       socket.join(conversationId);
       socket.join(userId.toString());
 
+      if (!privateChatPresence[conversationId]) {
+        privateChatPresence[conversationId] = [];
+      }
+
+      if (!privateChatPresence[conversationId].includes(userId)) {
+        privateChatPresence[conversationId].push(userId);
+      }
+
+      console.log(`🟢 ${userId} Entrou na conversa privada: ${conversationId}`);
+
+      // 🔔 Envia para os outros membros da sala que esse usuário entrou
+      socket.to(conversationId).emit("userJoinedPrivateChat", {
+        conversationId,
+        joinedUser: { userId }, // se quiser incluir mais, como username, mande junto
+      });
+
+      // Envia de volta quem já está na sala
+      const otherUsers = privateChatPresence[conversationId].filter(
+        (id) => id !== userId
+      );
+
+      io.to(conversationId).emit("currentUsersInPrivateChat", {
+        conversationId,
+        users: otherUsers,
+      });
+
       console.log(`🟢 ${userId} Entrou na conversa privada: ${conversationId}`);
     });
 
@@ -440,6 +468,14 @@ module.exports = function (io) {
     socket.on("leavePrivateChat", ({ conversationId, userId, username }) => {
       socket.leave(conversationId);
       socket.leave(userId.toString());
+      console.log(`🔴 ${username} saiu da conversa privada: ${conversationId}`);
+
+      if (privateChatPresence[conversationId]) {
+        privateChatPresence[conversationId] = privateChatPresence[
+          conversationId
+        ].filter((id) => id !== userId);
+      }
+
       console.log(`🔴 ${username} saiu da conversa privada: ${conversationId}`);
 
       const systemMsg = {
@@ -451,6 +487,18 @@ module.exports = function (io) {
 
       // Enviar para todos que ainda estão na sala
       io.to(conversationId).emit("newPrivateMessage", systemMsg);
+
+      // 🔥 Emitir evento para atualizar UI do outro usuário
+      io.to(conversationId).emit("userLeftPrivateChat", {
+        conversationId,
+        leftUser: { username, userId },
+      });
+
+      // Emitir lista atualizada após remoção
+      io.to(conversationId).emit("currentUsersInPrivateChat", {
+        conversationId,
+        users: privateChatPresence[conversationId],
+      });
     });
 
     // Enviar mensagem privada
