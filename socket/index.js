@@ -429,8 +429,10 @@ module.exports = function (io) {
 
     // directMessaging
     // Usuário entra numa conversa privada
-    socket.on("joinPrivateChat", ({ conversationId, userId }) => {
-      `🟢🟢🟢🟢 conversationId: ${conversationId}, userId: ${userId}`;
+    socket.on("joinPrivateChat", async ({ conversationId, userId }) => {
+      console.log(
+        `🟢🟢🟢🟢 conversationId: ${conversationId}, userId: ${userId}`
+      );
       socket.join(conversationId);
       socket.join(userId.toString());
 
@@ -445,9 +447,14 @@ module.exports = function (io) {
       console.log(`🟢 ${userId} Entrou na conversa privada: ${conversationId}`);
 
       // 🔔 Envia para os outros membros da sala que esse usuário entrou
+      const user = await User.findById(userId).select("username");
+
       socket.to(conversationId).emit("userJoinedPrivateChat", {
         conversationId,
-        joinedUser: { userId }, // se quiser incluir mais, como username, mande junto
+        joinedUser: {
+          userId,
+          username: user?.username || "Usuário",
+        },
       });
 
       // Envia de volta quem já está na sala

@@ -110,7 +110,8 @@ router.post("/rejectChatRequest", async (req, res) => {
 
 // 3. Accept chat request and start conversation
 // 3. Accept chat request and start conversation
-router.post("/startNewConversation", async (req, res) => {
+router.post("/startNewConversation", protect, async (req, res) => {
+  console.log("rota startNewConversation...");
   const { requester, requested, notificationId, conversationId } = req.body;
 
   console.log(
@@ -216,14 +217,12 @@ router.post("/startNewConversation", async (req, res) => {
 });
 
 router.get("/usersInChat/:id", protect, async (req, res) => {
-  console.log("chacando usuarios na sala")
+  console.log("chacando usuarios na sala");
 
   try {
     const conversationId = req.params.id;
 
-    const users = await Conversation.findById(conversationId)
-
-
+    const users = await Conversation.findById(conversationId);
 
     res.status(200).json({ users });
   } catch (error) {
@@ -232,16 +231,15 @@ router.get("/usersInChat/:id", protect, async (req, res) => {
   }
 });
 
-
 // routes/directMessages.js
-
 router.post("/reinvite", protect, async (req, res) => {
   console.log("reiviting user...");
   const { conversationId } = req.body;
 
-  console.log("conversationId:", conversationId)
+  console.log("conversationId:", conversationId);
 
   try {
+    const io = req.app.get("io");
     const conversation = await Conversation.findById(conversationId);
 
     if (!conversation || !conversation.leavingUser) {
@@ -283,12 +281,34 @@ router.post("/reinvite", protect, async (req, res) => {
     // ✅ Criar mensagem de sistema ANTES de emitir
     const systemMsg = await Message.create({
       conversationId: conversationId,
-      sender: requester,
-      text: `${requesterObject.username} voltou para a conversa.`,
+      userId: requester, // ← ESSENCIAL!
+      username: requesterObject.username,
+      profileImage: requesterObject.profileImage || "",
+      message: `${requesterObject.username} voltou para a conversa.`,
+      timestamp: new Date(),
       system: true,
     });
 
-    io.to(conversationId).emit("newPrivateMessage", systemMsg.toObject());
+    console.log("📦 Mensagem de retorno criada:", systemMsg);
+
+    console.log("emitindo mensagem via io...");
+    const fullSystemMsg = await Message.findById(systemMsg._id);
+
+    console.log("🔎 Mensagem completa para emitir:", fullSystemMsg);
+
+    conversation.participants.forEach((participantId) => {
+      console.log("📢 Emitindo para:", participantId.toString());
+      io.to(participantId.toString()).emit("newPrivateMessage", fullSystemMsg);
+    });
+
+    // envia para todos os sockets que entraram na sala dessa conversa
+    io.to(conversationId.toString()).emit("newPrivateMessage", fullSystemMsg);
+
+    io.to(conversationId).emit("debugLog", {
+      source: "reinvite",
+      message: "🟢 DEBUG DEBUG DEBUG DEBUG",
+      timestamp: new Date().toISOString(),
+    });
 
     res.status(200).json({
       message: "Convite reenviado com sucesso",
