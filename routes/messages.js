@@ -113,6 +113,17 @@ router.post("/rejectChatRequest", async (req, res) => {
 router.post("/startNewConversation", async (req, res) => {
   const { requester, requested, notificationId, conversationId } = req.body;
 
+  console.log(
+    "requester:",
+    requester,
+    "requested:",
+    requested,
+    "notificationId:",
+    notificationId,
+    "conversationId:",
+    conversationId
+  );
+
   if (!requester || !requested)
     return res.status(400).json({ error: "Missing requester or requested ID" });
 
@@ -124,12 +135,15 @@ router.post("/startNewConversation", async (req, res) => {
 
     // Se veio conversationId, é reinvite
     if (conversationId) {
+      console.log("conversationId present:", conversationId);
       const conversation = await Conversation.findById(conversationId);
       if (conversation) {
+        console.log("conversation found!");
         if (!conversation.participants.includes(requested)) {
           conversation.participants.push(requested);
         }
 
+        console.log("setting leavingUser back to null");
         conversation.leavingUser = null;
         await conversation.save();
 
@@ -142,6 +156,22 @@ router.post("/startNewConversation", async (req, res) => {
         if (notificationId) {
           await Notification.findByIdAndDelete(notificationId);
         }
+
+        // gerar a mensagem de reentrada:
+        const systemMsg = await Message.create({
+          conversationId,
+          userId: req.user._id, // usuário reentrante
+          username: req.user.username,
+          profileImage: req.user.profileImage || "",
+          message: `${req.user.username} voltou para a conversa.`,
+          timestamp: new Date(),
+          system: true,
+        });
+
+        // 🔔 Emitir para os usuários conectados ao socket da conversa
+        io.to(conversationId).emit("newPrivateMessage", {
+          ...systemMsg.toObject(),
+        });
 
         return res.status(200).json({
           message: "Usuário reinserido na conversa existente",
@@ -176,10 +206,29 @@ router.post("/startNewConversation", async (req, res) => {
       await Notification.findByIdAndDelete(notificationId);
     }
 
-    res.status(201).json({ message: "Conversation started", conversation: newConversation });
+    res
+      .status(201)
+      .json({ message: "Conversation started", conversation: newConversation });
   } catch (error) {
     console.error("Error starting conversation:", error);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/usersInChat/:id", protect, async (req, res) => {
+  console.log("chacando usuarios na sala")
+
+  try {
+    const conversationId = req.params.id;
+
+    const users = await Conversation.findById(conversationId)
+
+
+
+    res.status(200).json({ users });
+  } catch (error) {
+    console.error("Erro ao pegar usuários em chat privado:", error);
+    res.status(500).json({ error: "Erro interno." });
   }
 });
 
@@ -187,7 +236,10 @@ router.post("/startNewConversation", async (req, res) => {
 // routes/directMessages.js
 
 router.post("/reinvite", protect, async (req, res) => {
+  console.log("reiviting user...");
   const { conversationId } = req.body;
+
+  console.log("conversationId:", conversationId)
 
   try {
     const conversation = await Conversation.findById(conversationId);
@@ -204,7 +256,7 @@ router.post("/reinvite", protect, async (req, res) => {
       conversation.participants.push(requested);
     }
 
-     // Limpa o leavingUser
+    // Limpa o leavingUser
     conversation.leavingUser = null;
     await conversation.save();
 
@@ -225,9 +277,18 @@ router.post("/reinvite", protect, async (req, res) => {
       fromUser: requester,
       type: "chat_reinvite",
       content: `${requesterObject.username} te convidou para uma conversa privada.`,
-      conversationId
+      conversationId,
     });
 
+    // ✅ Criar mensagem de sistema ANTES de emitir
+    const systemMsg = await Message.create({
+      conversationId: conversationId,
+      sender: requester,
+      text: `${requesterObject.username} voltou para a conversa.`,
+      system: true,
+    });
+
+    io.to(conversationId).emit("newPrivateMessage", systemMsg.toObject());
 
     res.status(200).json({
       message: "Convite reenviado com sucesso",

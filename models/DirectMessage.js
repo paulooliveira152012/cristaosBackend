@@ -20,6 +20,10 @@ const directMessageSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    system: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
