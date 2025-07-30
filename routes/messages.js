@@ -159,20 +159,20 @@ router.post("/startNewConversation", protect, async (req, res) => {
         }
 
         // gerar a mensagem de reentrada:
-        const systemMsg = await Message.create({
-          conversationId,
-          userId: req.user._id, // usuário reentrante
-          username: req.user.username,
-          profileImage: req.user.profileImage || "",
-          message: `${req.user.username} voltou para a conversa.`,
-          timestamp: new Date(),
-          system: true,
-        });
+        // const systemMsg = await Message.create({
+        //   conversationId,
+        //   userId: req.user._id, // usuário reentrante
+        //   username: req.user.username,
+        //   profileImage: req.user.profileImage || "",
+        //   message: `${req.user.username} voltou para a conversa 1.`,
+        //   timestamp: new Date(),
+        //   system: true,
+        // });
 
         // 🔔 Emitir para os usuários conectados ao socket da conversa
-        io.to(conversationId).emit("newPrivateMessage", {
-          ...systemMsg.toObject(),
-        });
+        // io.to(conversationId).emit("newPrivateMessage", {
+        //   ...systemMsg.toObject(),
+        // });
 
         return res.status(200).json({
           message: "Usuário reinserido na conversa existente",
@@ -269,6 +269,12 @@ router.post("/reinvite", protect, async (req, res) => {
 
     const requesterObject = await User.findById(requester);
 
+    console.log("🟢🟣⚪️ requesterObject:", requesterObject)
+
+    const requestedObject = await User.findById(requested);
+
+    console.log("🟢🟣⚪️ requestedObject:", requestedObject)
+
     // 🔔 Reutiliza o mesmo tipo de notificação
     await createNotification({
       recipient: requested,
@@ -281,10 +287,10 @@ router.post("/reinvite", protect, async (req, res) => {
     // ✅ Criar mensagem de sistema ANTES de emitir
     const systemMsg = await Message.create({
       conversationId: conversationId,
-      userId: requester, // ← ESSENCIAL!
-      username: requesterObject.username,
-      profileImage: requesterObject.profileImage || "",
-      message: `${requesterObject.username} voltou para a conversa.`,
+      userId: requested, // ← ESSENCIAL!
+      username: requestedObject.username,
+      profileImage: requestedObject.profileImage || "",
+      message: `${requestedObject.username} voltou para a conversa.`,
       timestamp: new Date(),
       system: true,
     });
