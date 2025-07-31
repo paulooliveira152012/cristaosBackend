@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const {
   getNotifications,
-  createNotification,      // 🆕 Criar notificação
+  createNotificationController,      // 🆕 Criar notificação
   markAsRead,
   markAllAsRead,
   deleteNotification,
@@ -15,7 +15,7 @@ const { protect } = require("../utils/auth.js")
 router.get("/", protect, getNotifications);
 
 // ➕ POST criar uma nova notificação
-router.post("/", protect, createNotification);
+router.post("/", protect, createNotificationController);
 
 // marcar todas como lidas
 router.put("/read-all", protect, markAllAsRead);

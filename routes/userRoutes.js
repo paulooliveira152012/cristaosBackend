@@ -19,7 +19,7 @@ const { protect } = require("../utils/auth");
 const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
-const createNotification = require("../utils/notificationUtils");
+const createNotificationUtil = require("../utils/notificationUtils");
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -783,8 +783,12 @@ router.post("/friendRequest/:friendId", protect, async (req, res) => {
   await user.save();
   await friend.save();
 
+   // ✅ Notificação com socket
+  const io = req.app.get("io");
+
   // ✅ Aqui: criar notificação
-  await createNotification({
+  await createNotificationUtil({
+    io,
     recipient: friendId,
     fromUser: userId,
     type: "friend_request",

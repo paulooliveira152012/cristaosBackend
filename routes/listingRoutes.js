@@ -4,7 +4,10 @@ const Comment = require("../models/Comment");
 const router = express.Router();
 // const User = require("../models/User");
 const User = require("../models/Usuario");
-const createNotification = require("../utils/notificationUtils");
+// const createNotification = require("../utils/notificationUtils");
+// const createNotificationController = require("../controllers/notificationController");
+const createNotificationUtil = require("../utils/notificationUtils")
+// const createNotification = require("../controllers/notificationController")
 
 // Get All Listings
 router.get("/alllistings", async (req, res) => {
@@ -95,7 +98,7 @@ router.get("/listings/:id", async (req, res) => {
 
 // Like/Unlike a Listing
 router.put("/listingLike/:listingId", async (req, res) => {
-  console.log("Route found! Toggling like");
+  console.log("🟢 [1] Route found! Toggling like no banco de dados + chamada do notification controller");
 
   const { listingId } = req.params;
   const { userId } = req.body;
@@ -126,18 +129,18 @@ router.put("/listingLike/:listingId", async (req, res) => {
     // Salvar as mudanças
     await listing.save({ validateBeforeSave: false });
 
-    const user = await User.findById(userId)
-    console.log("o usuario que curtiu foi:", user)
+    const user = await User.findById(userId);
+    console.log("o usuario que curtiu foi:", user);
 
-    const io = req.app.get("io");
+    // const io = req.app.get("io");
 
-    console.log("io:", io)
+    // console.log("io:", io)
 
-    console.log("📡 io existe?", !!io); // true/false
+    // console.log("📡 io existe?", !!io); // true/false
 
     // ✅ Se for um novo like e o dono do post for diferente do usuário
     if (!isLiked && listing.userId.toString() !== userId.toString()) {
-      await createNotification({
+      await createNotificationUtil({
         io: req.app.get("io"),
         recipient: listing.userId,
         fromUser: userId,
@@ -147,7 +150,7 @@ router.put("/listingLike/:listingId", async (req, res) => {
       });
     }
 
-    console.log("new notification created!")
+    console.log("new notification created!");
 
     console.log("Lista de likes após a alteração:", listing.likes);
     res.status(200).json({ likes: listing.likes });

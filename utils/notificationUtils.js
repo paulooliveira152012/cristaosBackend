@@ -1,6 +1,6 @@
 const Notification = require("../models/Notification");
 
-const createNotification = async ({
+const createNotificationUtil = async ({
   io, // 🔥 receber o io aqui
   recipient,
   fromUser,
@@ -10,6 +10,8 @@ const createNotification = async ({
   commentId = null,
   conversationId = null, // 🔄 corrigido typo
 }) => {
+
+  console.log("🟢 [3] notificationUtils, mandar a notificação via socket")
   console.log("io:", io)
   console.log("recipient:", recipient)
   
@@ -54,4 +56,10 @@ const createNotification = async ({
   }
 };
 
-module.exports = createNotification;
+module.exports = createNotificationUtil;
+
+
+/*
+  curtida de comentario
+  reply de comentario
+*/

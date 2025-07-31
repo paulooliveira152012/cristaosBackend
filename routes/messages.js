@@ -5,7 +5,8 @@ const User = require("../models/Usuario");
 const Conversation = require("../models/Conversation");
 const Message = require("../models/Message");
 const Notification = require("../models/Notification");
-const createNotification = require("../utils/notificationUtils");
+// const createNotification = require("../utils/notificationUtils");
+const createNotificationUtil = require("../utils/notificationUtils")
 const { protect } = require("../utils/auth");
 
 // get dm chats from user
@@ -51,6 +52,7 @@ router.get("/userConversations/:userId", async (req, res) => {
 // 1. Send chat request
 // 1. Send chat request
 router.post("/sendChatRequest", async (req, res) => {
+  console.log("send chat request route...")
   const { requester, requested } = req.body;
   if (!requester || !requested)
     return res.status(400).json({ error: "Missing requester or requested ID" });
@@ -69,8 +71,11 @@ router.post("/sendChatRequest", async (req, res) => {
     const requesterUsername = requesterObject.username;
     console.log("requesterUsername:", requesterUsername);
 
+    const io = req.app.get("io")
+
     // 🔔 Cria notificação para o usuário solicitado
-    await createNotification({
+    await createNotificationUtil({
+      io,
       recipient: requested,
       fromUser: requester,
       type: "chat_request", // ou "chat_request" se quiser criar uma nova categoria

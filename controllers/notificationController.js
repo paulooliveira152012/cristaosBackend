@@ -1,5 +1,5 @@
 const Notification = require("../models/Notification");
-const createNotification = require("../utils/notificationUtils");
+const createNotificationUtil = require("../utils/notificationUtils");
 
 // Buscar todas as notificações de um usuário
 exports.getNotifications = async (req, res) => {
@@ -19,8 +19,10 @@ exports.getNotifications = async (req, res) => {
 };
 
 // Criar uma nova notificação
-exports.createNotification = async (req, res) => {
-  console.log("route for creating a new notification reached");
+exports.createNotificationController = async (req, res) => {
+  console.log(
+    "🟢 [2] notificationController: route for creating a new notification socket instance + chamar notificationUtils reached"
+  );
 
   const io = req.app.get("io");
   console.log("📡 io existe?", !!io);
@@ -38,7 +40,7 @@ exports.createNotification = async (req, res) => {
     const io = req.app.get("io");
     console.log("📡 io disponível?", !!io); // vai imprimir true ou false
 
-    await createNotification({
+    await createNotificationUtil({
       io: req.app.get("io"), // 🔥 passa o socket aqui
       recipient,
       fromUser,
