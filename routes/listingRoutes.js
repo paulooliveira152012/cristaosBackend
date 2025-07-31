@@ -129,9 +129,16 @@ router.put("/listingLike/:listingId", async (req, res) => {
     const user = await User.findById(userId)
     console.log("o usuario que curtiu foi:", user)
 
+    const io = req.app.get("io");
+
+    console.log("io:", io)
+
+    console.log("📡 io existe?", !!io); // true/false
+
     // ✅ Se for um novo like e o dono do post for diferente do usuário
     if (!isLiked && listing.userId.toString() !== userId.toString()) {
       await createNotification({
+        io: req.app.get("io"),
         recipient: listing.userId,
         fromUser: userId,
         type: "like",

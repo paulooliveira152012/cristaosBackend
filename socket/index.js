@@ -59,6 +59,15 @@ module.exports = function (io) {
     //   console.log(`📥🟢 [onAny] Evento recebido: ${event}`, args);
     // });
 
+    // Escuta quando o front-end emite "setup" e coloca o socket na sala com ID do usuário
+    socket.on("setup", (userId) => {
+      if (!userId) return;
+      socket.join(userId); // Adiciona o socket à sala com o ID do usuário
+      console.log(
+        `✅ Usuário ${userId} entrou na sua sala pessoal via socket.`
+      );
+    });
+
     // 2 - Definimos os eventos que esse socket (usuário) poderá emitir durante a sessão
 
     // 2.a - emitir usuario online globalmente

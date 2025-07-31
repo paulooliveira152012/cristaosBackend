@@ -43,6 +43,8 @@ const io = socketIo(server, {
   }
 });
 
+// 💥 Aqui é onde você injeta o io dentro do app Express
+app.set("io", io);
 
 // .index.js e socketHandlers.js sao necessarios... preciso juntar ambos em um so!
 

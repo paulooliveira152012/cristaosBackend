@@ -1,8 +1,9 @@
 const Notification = require("../models/Notification");
+const createNotification = require("../utils/notificationUtils");
 
 // Buscar todas as notificações de um usuário
 exports.getNotifications = async (req, res) => {
-  console.log("fetching notifications...")
+  console.log("fetching notifications...");
   try {
     const userId = req.user._id;
 
@@ -10,10 +11,9 @@ exports.getNotifications = async (req, res) => {
       .sort({ createdAt: -1 })
       .populate("fromUser", "username profileImage");
 
-
     res.status(200).json(notifications);
   } catch (error) {
-    console.log("error", error)
+    console.log("error", error);
     res.status(500).json({ message: "Erro ao buscar notificações." });
   }
 };
@@ -22,32 +22,40 @@ exports.getNotifications = async (req, res) => {
 exports.createNotification = async (req, res) => {
   console.log("route for creating a new notification reached");
 
+  const io = req.app.get("io");
+  console.log("📡 io existe?", !!io);
+
   try {
     const { type, recipient, content, listingId, commentId } = req.body;
 
     // `fromUser` vem do middleware `protect`
     const fromUser = req.user._id;
 
-    console.log(`type: ${type}, recipient: ${recipient}, fromUser: ${fromUser}`);
+    console.log(
+      `type: ${type}, recipient: ${recipient}, fromUser: ${fromUser}`
+    );
 
-    const newNotification = new Notification({
-      type,
+    const io = req.app.get("io");
+    console.log("📡 io disponível?", !!io); // vai imprimir true ou false
+
+    await createNotification({
+      io: req.app.get("io"), // 🔥 passa o socket aqui
       recipient,
       fromUser,
+      type,
       content,
       listingId,
       commentId,
     });
 
-    await newNotification.save();
-
-    res.status(201).json(newNotification);
+    res
+      .status(201)
+      .json({ message: "Notificação criada e emitida com sucesso." });
   } catch (error) {
     console.error("Erro ao criar notificação:", error);
     res.status(500).json({ message: "Erro ao criar notificação." });
   }
 };
-
 
 // Marcar como lida
 // ✅ Marcar como lida
@@ -70,13 +78,16 @@ exports.markAllAsRead = async (req, res) => {
       { recipient: userId, isRead: false },
       { $set: { isRead: true } }
     );
-    res.status(200).json({ message: "Todas as notificações foram marcadas como lidas." });
+    res
+      .status(200)
+      .json({ message: "Todas as notificações foram marcadas como lidas." });
   } catch (error) {
     console.error("Erro ao marcar todas como lidas:", error);
-    res.status(500).json({ message: "Erro ao marcar notificações como lidas." });
+    res
+      .status(500)
+      .json({ message: "Erro ao marcar notificações como lidas." });
   }
 };
-
 
 // ✅ Deletar notificação
 exports.deleteNotification = async (req, res) => {
