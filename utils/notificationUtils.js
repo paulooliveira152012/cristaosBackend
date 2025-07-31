@@ -7,14 +7,13 @@ const createNotificationUtil = async ({
   type,
   content,
   listingId,
-  commentId = null,
+  commentId,
   conversationId = null, // 🔄 corrigido typo
 }) => {
+  console.log("🟢 [3] notificationUtils, mandar a notificação via socket");
+  console.log("io:", io);
+  console.log("recipient:", recipient);
 
-  console.log("🟢 [3] notificationUtils, mandar a notificação via socket")
-  console.log("io:", io)
-  console.log("recipient:", recipient)
-  
   try {
     if (recipient.toString() === fromUser.toString()) return; // não notifica a si mesmo
 
@@ -31,12 +30,11 @@ const createNotificationUtil = async ({
     await newNotification.save();
 
     console.log("🔔 Notificação criada:", type);
-    console.log("emitindo notificação via socket...")
-    
+    console.log("emitindo notificação via socket...");
 
     // 🔥 Emitir o socket para o destinatário, se io estiver presente
     if (io) {
-      console.log("io:", io)
+      console.log("io:", io);
       io.to(recipient.toString()).emit("newNotification", {
         _id: newNotification._id,
         type,
@@ -49,7 +47,7 @@ const createNotificationUtil = async ({
       });
       console.log("📤 Notificação emitida via socket");
     } else {
-      console.log("notificacnao de socket nao enviada...")
+      console.log("notificacnao de socket nao enviada...");
     }
   } catch (error) {
     console.error("❌ Erro ao criar notificação:", error.message);
@@ -57,7 +55,6 @@ const createNotificationUtil = async ({
 };
 
 module.exports = createNotificationUtil;
-
 
 /*
   curtida de comentario

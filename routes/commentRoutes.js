@@ -237,18 +237,23 @@ router.put("/comment/like/:commentId", async (req, res) => {
 
     await listing.save();
 
-    // chamar notification util
+    const io = req.app.get("io");
 
-    const io = req.app.get("io")
+    // 🔥 Buscar o usuário que curtiu (para pegar o username dele)
+    const user = await User.findById(userId);
 
-    // 🔔 Cria notificação para o usuário solicitado
-    await createNotificationUtil({
-      io,
-      recipient: requested,
-      fromUser: requester,
-      type: "comment_like", // ou "chat_request" se quiser criar uma nova categoria
-      content: `${requesterObject.username} te convidou para uma conversa privada.`,
-    });
+    // 🔔 Se não for o próprio autor do comentário, envia notificação
+    if (!isLiked && comment.user.toString() !== userId.toString()) {
+      await createNotificationUtil({
+        io,
+        recipient: comment.user,
+        fromUser: userId,
+        type: "comment_like",
+        content: `${user.username} curtiu seu comentário.`,
+        listingId: listing._id,
+        commentId: comment._id,
+      });
+    }
 
     console.log("comment like/unlike saved in database");
     res.status(200).json({ likes: comment.likes });
@@ -315,6 +320,24 @@ router.put("/comment/like/:parentCommentId/:replyId", async (req, res) => {
     }
 
     await listing.save();
+
+    const io = req.app.get("io");
+    const user = await User.findById(userId);
+
+    console.log("creating notification...")
+    // Enviar notificação apenas se for novo like e não for o próprio autor da resposta
+    if (!isLiked && reply.user.toString() !== userId.toString()) {
+      await createNotificationUtil({
+        io,
+        recipient: reply.user,
+        fromUser: userId,
+        type: "reply_like",
+        content: `${user.username} curtiu sua resposta.`,
+        listingId: listing._id,
+        commentId: parentComment._id,
+      });
+    }
+
     console.log("Reply like/unlike saved in database");
 
     res.status(200).json({ likes: reply.likes });
