@@ -40,6 +40,13 @@ const handleSendMessage = async (io, roomId, data) => {
 
     console.log("Broadcasting message to room:", roomId, newMessage); // Log message for debugging
 
+
+    io.emit("newMessage", {
+      roomId,
+      message: data.message
+    })
+
+
     // Emit the new message to all clients in the room (including the sender)
     io.to(roomId).emit('receiveMessage', newMessage); // Broadcast to the room
 
