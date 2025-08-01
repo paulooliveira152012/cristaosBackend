@@ -72,10 +72,10 @@ module.exports = function (io) {
 
     // 2.a - emitir usuario online globalmente
     socket.on("userLoggedIn", (user) => {
-      if (!user || !user._id) {
-        emitError("Invalid user data received for login.");
-        return;
-      }
+      // if (!user || !user._id) {
+      //   emitError("Invalid user data received for login.");
+      //   return;
+      // }
       console.log("user:", user);
       addUser(socket.id, user);
       emitOnlineUsers(io);
