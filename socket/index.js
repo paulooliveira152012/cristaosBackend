@@ -381,11 +381,15 @@ module.exports = function (io) {
 
     // 2.i mandar mensagem
     socket.on("sendMessage", (data) => {
+      console.log("📥 Nova mensagem recebida:", data);
+
       const { roomId } = data;
       if (!roomId) {
         emitError("Room ID is required to send a message.");
         return;
       }
+
+      data.profileImage = data.profileImage || "";
       handleSendMessage(io, roomId, data);
     });
 

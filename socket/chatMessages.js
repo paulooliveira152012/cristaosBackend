@@ -19,7 +19,9 @@ const emitChatHistory = async (socket, roomId) => {
 
 // Handle incoming messages for a specific room
 const handleSendMessage = async (io, roomId, data) => {
-  if (!data || !data.username || !data.message || !data.userId || !data.profileImage) {
+  console.log("handleSendMessage...")
+  if (!data || !data.username || !data.message || !data.userId) {
+    console.log("missing essential data")
     io.to(roomId).emit('errorMessage', 'Invalid message data');
     return;
   }
@@ -112,7 +114,7 @@ const handleSendPrivateMessage = async (io, socket, data) => {
       userId: sender,
       receiver, // 👈 novo campo adicionado
       username: user.username,
-      profileImage: user.profileImage,
+      profileImage: user.profileImage || "",
       message,
       timestamp: new Date(),
     });
