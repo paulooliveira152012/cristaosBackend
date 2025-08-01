@@ -6,20 +6,17 @@ const router = express.Router();
 const User = require("../models/Usuario");
 // const createNotification = require("../utils/notificationUtils");
 // const createNotificationController = require("../controllers/notificationController");
-const createNotificationUtil = require("../utils/notificationUtils")
+const createNotificationUtil = require("../utils/notificationUtils");
 // const createNotification = require("../controllers/notificationController")
 
 // Get All Listings
+// Get All Listings
 router.get("/alllistings", async (req, res) => {
-  console.log("You've reached the backend to fecth all items!");
+  console.log("You've reached the backend to fetch all items!");
   try {
-    const listings = await Listing.find().populate(
-      "userId",
-      "username profileImage"
-    );
-
-    // Log the listings to verify they contain user data
-    // console.log("Listings fetched:", listings);
+    const listings = await Listing.find()
+      .populate("userId", "username profileImage") // criador da postagem
+      .populate("poll.votes.userId", "username profileImage"); // quem votou
 
     res.status(200).json({ listings });
   } catch (error) {
@@ -28,11 +25,21 @@ router.get("/alllistings", async (req, res) => {
   }
 });
 
+
 // Create Listing
 router.post("/create", async (req, res) => {
   console.log("create route reached!");
-  const { userId, type, blogTitle, blogContent, imageUrl, link, poll, tags } =
-    req.body;
+  const {
+    userId,
+    type,
+    blogTitle,
+    blogContent,
+    imageUrl,
+    link,
+    poll,
+    tags,
+    linkDescription,
+  } = req.body;
   try {
     const newListing = new Listing({
       userId,
@@ -43,6 +50,7 @@ router.post("/create", async (req, res) => {
       link,
       poll,
       tags,
+      linkDescription,
     });
     await newListing.save();
     res
@@ -57,6 +65,7 @@ router.post("/create", async (req, res) => {
 // http://localhost:5001/api/listings/users/66ea3b118be39848e1d002f4
 
 // Get Listings by User
+// Get Listings by User
 router.get("/users/:userId", async (req, res) => {
   console.log("user's listings route hit!");
   const { userId } = req.params;
@@ -65,7 +74,10 @@ router.get("/users/:userId", async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    const listings = await Listing.find({ userId });
+    const listings = await Listing.find({ userId })
+      .populate("userId", "username profileImage")
+      .populate("poll.votes.userId", "profileImage username");
+
     res.status(200).json({ user, listings });
   } catch (error) {
     res
@@ -73,6 +85,7 @@ router.get("/users/:userId", async (req, res) => {
       .json({ message: "Error fetching user info and listings", error });
   }
 });
+
 
 // Get Listing by ID
 router.get("/listings/:id", async (req, res) => {
@@ -98,7 +111,9 @@ router.get("/listings/:id", async (req, res) => {
 
 // Like/Unlike a Listing
 router.put("/listingLike/:listingId", async (req, res) => {
-  console.log("🟢 [1] Route found! Toggling like no banco de dados + chamada do notification controller");
+  console.log(
+    "🟢 [1] Route found! Toggling like no banco de dados + chamada do notification controller"
+  );
 
   const { listingId } = req.params;
   const { userId } = req.body;
@@ -314,5 +329,33 @@ router.post(
     }
   }
 );
+
+router.post("/:listingId/vote", async (req, res) => {
+  const { listingId } = req.params;
+  const { userId, optionIndex } = req.body;
+
+  try {
+    const listing = await Listing.findById(listingId);
+
+    // Impedir múltiplos votos
+    const alreadyVoted = listing.poll.votes.find(
+      (v) => v.userId.toString() === userId
+    );
+
+    if (alreadyVoted) {
+      return res.status(400).json({ message: "Você já votou." });
+    }
+
+    // Adiciona o voto
+    listing.poll.votes.push({ userId, optionIndex });
+
+    await listing.save();
+
+    res.status(200).json({ updatedPoll: listing.poll });
+  } catch (err) {
+    console.error("Erro ao votar:", err);
+    res.status(500).json({ message: "Erro interno ao votar." });
+  }
+});
 
 module.exports = router;

@@ -32,10 +32,20 @@ const listingSchema = new mongoose.Schema({
   blogContent: String,
   imageUrl: String,
   link: String,
+  linkDescription: String,
   poll: {
-    question: String,
-    options: [String],
-  },
+  question: String,
+  options: [String],
+  votes: [
+    {
+      userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User", // <- referenciando o modelo User
+      },
+      optionIndex: Number,
+    }
+  ]
+},
   likes: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User', // Users who liked the listing
