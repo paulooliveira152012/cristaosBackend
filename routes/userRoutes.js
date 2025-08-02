@@ -31,6 +31,21 @@ const {
 
 const { sendVerificationSMS } = require("../utils/sms");
 
+
+router.get("/getAllUsers", async (req, res) => {
+  console.log("🟢 🟢 🟢  rota de buscar todos os usuarios...")
+
+  try {
+    const users = await User.find({}, "_id username profileImage")
+    console.log("response:", users)
+
+    res.status(200).json({ users })
+  } catch (err) {
+     console.log("error:", err)
+     res.status(500).json({ message: "Erro ao buscar usuarios" })
+  }
+})
+
 // google login
 router.post("/google-login", async (req, res) => {
   const { token } = req.body;
