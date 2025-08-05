@@ -17,7 +17,7 @@ const ReelsSchema = new mongoose.Schema({
   },
   videoUrl: {
     type: String,
-    required: true,
+    required: false,
   },
   createdAt: {
     type: Date,

@@ -9,6 +9,7 @@ const User = require("../models/Usuario");
 // const createNotificationController = require("../controllers/notificationController");
 const createNotificationUtil = require("../utils/notificationUtils");
 // const createNotification = require("../controllers/notificationController")
+const { uploadToS3 } = require("../utils/s3Uploader"); // sua função já existente
 
 // Get All Listings
 // Get All Listings
@@ -41,6 +42,8 @@ router.get("/allreels", async (req, res) => {
   }
 });
 
+
+
 // Create Listing
 router.post("/create", async (req, res) => {
   const {
@@ -53,37 +56,9 @@ router.post("/create", async (req, res) => {
     poll,
     tags,
     linkDescription,
-    reel,
   } = req.body;
   console.log("create route reached!");
   try {
-    // Create a new listing based on the type
-    if (type === "reel") {
-      console.log("Creating a new reel...");
-      console.log("reel data received:", reel);
-      if (!reel || !reel.videoUrl) {
-        console.log("Reel data is incomplete:", reel);
-        return res.status(400).json({ message: "Reel data is incomplete." });
-      }
-      if (!userId) {
-        return res.status(400).json({ message: "User ID is required." });
-      }
-      const newReel = new Reel({
-        userId,
-        videoUrl: reel.videoUrl,
-        description: reel.description,
-        thumbnailUrl: reel.thumbnailUrl,
-        tags,
-        // outros campos específicos
-      });
-
-      await videoConverter.convertMovToMp4(reel.videoUrl, newReel.videoUrl);
-      await newReel.save();
-      console.log("Reel created successfully:", newReel);
-      return res
-        .status(201)
-        .json({ message: "Reel created successfully!", reel: newReel });
-    } else {
       const newListing = new Listing({
         userId,
         type,
@@ -94,7 +69,6 @@ router.post("/create", async (req, res) => {
         poll,
         tags,
         linkDescription,
-        reel,
       });
 
       await newListing.save();
@@ -104,7 +78,6 @@ router.post("/create", async (req, res) => {
           message: "Listing created successfully!",
           listing: newListing,
         });
-    }
   } catch (error) {
     console.error("Error creating listing:", error);
     res.status(500).json({ message: "Error creating listing", error });
