@@ -1,5 +1,6 @@
 const express = require("express");
 const Listing = require("../models/Listing");
+const Reel = require("../models/Reels");
 const Comment = require("../models/Comment");
 const router = express.Router();
 // const User = require("../models/User");
@@ -25,10 +26,23 @@ router.get("/alllistings", async (req, res) => {
   }
 });
 
+router.get("/allreels", async (req, res) => {
+  console.log(" 🟢 🟢 🟢 You've reached the backend to fetch all reels!");
+  try {
+    const reels = await Reel.find()
+      .populate("userId", "username profileImage") // criador do reel
+      .sort({ createdAt: -1 }); // ordena por data de criação, do mais recente para o mais antigo
+
+    console.log("Fetched reels:", reels);
+    res.status(200).json({ reels });
+  } catch (error) {
+    console.log("error:", error);
+    res.status(500).json({ message: "Error fetching reels", error });
+  }
+});
 
 // Create Listing
 router.post("/create", async (req, res) => {
-  console.log("create route reached!");
   const {
     userId,
     type,
@@ -39,24 +53,60 @@ router.post("/create", async (req, res) => {
     poll,
     tags,
     linkDescription,
+    reel,
   } = req.body;
+  console.log("create route reached!");
   try {
-    const newListing = new Listing({
-      userId,
-      type,
-      blogTitle,
-      blogContent,
-      imageUrl,
-      link,
-      poll,
-      tags,
-      linkDescription,
-    });
-    await newListing.save();
-    res
-      .status(201)
-      .json({ message: "Listing created successfully!", listing: newListing });
+    // Create a new listing based on the type
+    if (type === "reel") {
+      console.log("Creating a new reel...");
+      console.log("reel data received:", reel);
+      if (!reel || !reel.videoUrl) {
+        console.log("Reel data is incomplete:", reel);
+        return res.status(400).json({ message: "Reel data is incomplete." });
+      }
+      if (!userId) {
+        return res.status(400).json({ message: "User ID is required." });
+      }
+      const newReel = new Reel({
+        userId,
+        videoUrl: reel.videoUrl,
+        description: reel.description,
+        thumbnailUrl: reel.thumbnailUrl,
+        tags,
+        // outros campos específicos
+      });
+
+      await videoConverter.convertMovToMp4(reel.videoUrl, newReel.videoUrl);
+      await newReel.save();
+      console.log("Reel created successfully:", newReel);
+      return res
+        .status(201)
+        .json({ message: "Reel created successfully!", reel: newReel });
+    } else {
+      const newListing = new Listing({
+        userId,
+        type,
+        blogTitle,
+        blogContent,
+        imageUrl,
+        link,
+        poll,
+        tags,
+        linkDescription,
+        reel,
+      });
+
+      await newListing.save();
+      return res
+        .status(201)
+        .json({
+          message: "Listing created successfully!",
+          listing: newListing,
+        });
+    }
   } catch (error) {
+    console.error("Error creating listing:", error);
     res.status(500).json({ message: "Error creating listing", error });
   }
 });
@@ -85,7 +135,6 @@ router.get("/users/:userId", async (req, res) => {
       .json({ message: "Error fetching user info and listings", error });
   }
 });
-
 
 // Get Listing by ID
 router.get("/listings/:id", async (req, res) => {
