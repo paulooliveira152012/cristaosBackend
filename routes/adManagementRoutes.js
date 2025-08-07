@@ -7,6 +7,8 @@ const fs = require("fs");
 const router = express.Router();
 const upload = multer({ dest: "uploads/" });
 
+
+
 // Adicionar anúncio
 router.post("/add", upload.single("image"), async (req, res) => {
   console.log("Add Route REACHED");
@@ -41,7 +43,9 @@ router.post("/add", upload.single("image"), async (req, res) => {
     });
     await newAd.save();
     // Emitir evento para notificar sobre o novo anúncio
+
     const io = req.app.get("io");
+
     if (!io) {
       console.error("Socket.io não está configurado.");
       return res.status(500).json({ message: "Erro ao configurar Socket.io." });
@@ -93,6 +97,16 @@ router.put("/edit/:adId", upload.single("image"), async (req, res) => {
     }
     console.log("Anúncio editado com sucesso:", updatedAd);
     res.status(200).json({ message: "Anúncio editado com sucesso!", ad: updatedAd });
+
+    const io = req.app.get("io")
+
+    if (!io) {
+      console.log("Io nao estabelecido")
+      return res.status(500).json({ message: "Erro ao configurar Socket.io." });
+    }
+
+    io.emit("updatedAd", updatedAd)
+
   } catch (error) {
     console.error("Erro ao editar anúncio:", error);
     res.status(500).json({ message: "Erro ao editar anúncio", error });
@@ -111,7 +125,18 @@ router.delete("/delete/:adId", async (req, res) => {
       return res.status(404).json({ message: "Anúncio não encontrado." });
     }
     console.log("Anúncio excluído com sucesso:", deletedAd);
+    const io = req.app.get("io");
+
+    if (!io) {
+      console.error("Socket.io não está configurado.");
+      return res.status(500).json({ message: "Erro ao configurar Socket.io." });
+    }
+    console.log("Socket.io está configurado, emitindo evento 'newAdCreated'.");
+
+    console.log("Emitindo evento 'adDeleted'");
+    io.emit("adDeleted", { _id: deletedAd._id }); // envia só o essencial
     res.status(200).json({ message: "Anúncio excluído com sucesso!" });
+
   } catch (error) {
     console.error("Erro ao excluir anúncio:", error);
     res.status(500).json({ message: "Erro ao excluir anúncio", error });
