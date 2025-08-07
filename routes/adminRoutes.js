@@ -24,8 +24,9 @@ router.delete("/admDeleteListing/:listingId", async (req, res) => {
   }
 });
 
+// Rota para adicionar um novo Add (acesso de líder)
 router.post("/admListAdd", verifyToken, verifyLeader, async (req, res) => {
-  console.log("POST ADM ROUTE REACHED")
+  console.log("List Add Route REACHED")
   const { title, description, price, imageUrl, link, userId } = req.body;
 
   try {
@@ -48,28 +49,28 @@ router.post("/admListAdd", verifyToken, verifyLeader, async (req, res) => {
   }
 });
 
-// Rota para editar uma postagem (acesso de líder)
+// Rota para editar um anuncio (acesso de líder)
 router.put("/admEditAd/:addId", verifyToken, verifyLeader, async (req, res) => {
   console.log("PUT ADM ROUTE REACHED")
   const { addId } = req.params;
   const { title, description, price, imageUrl } = req.body;
 
   try {
-    const updatedListing = await Listing.findByIdAndUpdate(
+    const updatedAdd = await Add.findByIdAndUpdate(
       addId,
       { title, description, price, imageUrl },
       { new: true }
     );
 
-    if (!updatedListing) {
-      return res.status(404).json({ message: "Postagem não encontrada." });
+    if (!updatedAdd) {
+      return res.status(404).json({ message: "Anuncio não encontrado." });
     }
 
-    res.status(200).json({ message: "Postagem atualizada com sucesso.", listing: updatedListing });
+    res.status(200).json({ message: "Anuncio atualizado com sucesso.", add: updatedAdd });
 
   } catch (error) {
-    console.error("Erro ao atualizar postagem:", error);
-    res.status(500).json({ message: "Erro interno ao atualizar postagem." });
+    console.error("Erro ao atualizar anuncio:", error);
+    res.status(500).json({ message: "Erro interno ao atualizar anuncio." });
   }
 });
 

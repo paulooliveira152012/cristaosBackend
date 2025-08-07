@@ -9,6 +9,8 @@ const uploadImageRoute = require('./upload-url');
 const notifications = require('./notifications')
 const messagesRoutes = require('./messages')
 const reelRoutes = require("./reelRoutes");
+const adManagementRoutes = require('./adManagementRoutes');
+
 
 const router = express.Router();
 
@@ -22,6 +24,7 @@ router.use('/adm', adminRoutes);
 router.use('/dm', messagesRoutes);
 router.use('/', uploadImageRoute);
 router.use('/reels', reelRoutes);
+router.use("/adManagement", adManagementRoutes);
 
 module.exports = router;
 
