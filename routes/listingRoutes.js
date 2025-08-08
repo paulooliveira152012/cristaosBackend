@@ -27,20 +27,7 @@ router.get("/alllistings", async (req, res) => {
   }
 });
 
-router.get("/allreels", async (req, res) => {
-  console.log(" 🟢 🟢 🟢 You've reached the backend to fetch all reels!");
-  try {
-    const reels = await Reel.find()
-      .populate("userId", "username profileImage") // criador do reel
-      .sort({ createdAt: -1 }); // ordena por data de criação, do mais recente para o mais antigo
 
-    console.log("Fetched reels:", reels);
-    res.status(200).json({ reels });
-  } catch (error) {
-    console.log("error:", error);
-    res.status(500).json({ message: "Error fetching reels", error });
-  }
-});
 
 
 

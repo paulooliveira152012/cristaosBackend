@@ -23,6 +23,27 @@ const ReelsSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  // campos esperados
+  likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User", default: [] }],
+  savedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User", default: [] }],
+  comments: [
+    {
+      userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+      },
+      text: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now },
+    },
+  ],
+  shares: [
+    {
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      url: String,
+      createdAt: { type: Date, default: Date.now },
+    },
+  ],
 });
 
 module.exports = mongoose.model("Reels", ReelsSchema);
