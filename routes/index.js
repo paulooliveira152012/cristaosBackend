@@ -10,6 +10,8 @@ const notifications = require('./notifications')
 const messagesRoutes = require('./messages')
 const reelRoutes = require("./reelRoutes");
 const adManagementRoutes = require('./adManagementRoutes');
+const admChurchRoutes = require('./adminChurchRoutes')
+const churchRoutes = require('./churchRoutes')
 
 
 const router = express.Router();
@@ -25,6 +27,8 @@ router.use('/dm', messagesRoutes);
 router.use('/', uploadImageRoute);
 router.use('/reels', reelRoutes);
 router.use("/adManagement", adManagementRoutes);
+router.use("/admChurch", admChurchRoutes)
+router.use("/church", churchRoutes)
 
 module.exports = router;
 
