@@ -63,9 +63,9 @@ module.exports = function (io) {
     socket.on("setup", (userId) => {
       if (!userId) return;
       socket.join(userId); // Adiciona o socket à sala com o ID do usuário
-      console.log(
-        `✅ Usuário ${userId} entrou na sua sala pessoal via socket.`
-      );
+      // console.log(
+      //   `✅ Usuário ${userId} entrou na sua sala pessoal via socket.`
+      // );
     });
 
     // 2 - Definimos os eventos que esse socket (usuário) poderá emitir durante a sessão
