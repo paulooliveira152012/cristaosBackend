@@ -23,18 +23,10 @@ async function refreshMembersCount(churchId) {
   await Church.findByIdAndUpdate(churchId, { membersCount: count });
 }
 
-/**
- * GET /api/churches
- * Lista de igrejas
- */
-router.get("/", protect, adminOnly, async (req, res) => {
-  console.log("🟢 getting all churches");
-  const churches = await Church.find().sort({ createdAt: -1 });
-  res.json(churches);
-});
+
 
 /**
- * GET /api/churches/geojson
+ * GET /api/admChurchRoutes/geojson
  * GeoJSON pra usar direto no Mapbox
  */
 // GET /api/church/geojson  (público)
@@ -42,7 +34,7 @@ router.get("/geojson", async (req, res) => {
   console.log("🟢 PUBLIC: getting geojson for map");
   const churches = await Church.find(
     { "location.coordinates.0": { $exists: true } },
-    { name: 1, summary: 1, location: 1 }
+    { name: 1, summary: 1, location: 1, address: 1 }
   );
 
   const fc = {
@@ -62,6 +54,7 @@ router.get("/geojson", async (req, res) => {
           title: c.name,
           description: c.summary || "",
           url: `/church/${c._id}`,
+          address: c.address || ""
         },
         geometry: {
           type: "Point",
@@ -74,7 +67,7 @@ router.get("/geojson", async (req, res) => {
 });
 
 /**
- * GET /api/churches/:id
+ * GET /api/admChurchRoutes/:id
  * Detalhe da igreja
  */
 // GET /api/church/:id  (público)
@@ -96,7 +89,7 @@ router.get("/:id", async (req, res) => {
 });
 
 /**
- * POST /api/churches
+ * POST /api/admChurchRoutes
  * Cria igreja
  * Aceita body com { name, summary, website, address, denomination, meetingTimes[], imageUrl, location { type: 'Point', coordinates: [lng, lat] } }
  * ou com lng/lat separados (converte automaticamente)
@@ -116,7 +109,7 @@ router.post("/registerChurch", protect, adminOnly, async (req, res) => {
 });
 
 /**
- * PUT /api/churches/:id
+ * PUT /api/admChurchRoutes/:id
  * Atualiza igreja
  */
 router.put("/:id", protect, adminOnly, async (req, res) => {

@@ -14,6 +14,8 @@ const DirectMessageRequest = require("../models/DirectMessage");
 const Conversation = require("../models/Conversation");
 const Message = require("../models/Message");
 const Listing = require("../models/Listing");
+const Church = require("../models/church");
+const ChurchMembership = require("../models/churchMembers");
 const Comment = require("../models/Comment");
 const { protect } = require("../utils/auth");
 const nodemailer = require("nodemailer");
@@ -31,20 +33,19 @@ const {
 
 const { sendVerificationSMS } = require("../utils/sms");
 
-
 router.get("/getAllUsers", async (req, res) => {
-  console.log("🟢 🟢 🟢  rota de buscar todos os usuarios...")
+  console.log("🟢 🟢 🟢  rota de buscar todos os usuarios...");
 
   try {
-    const users = await User.find({}, "_id username profileImage")
-    console.log("response:", users)
+    const users = await User.find({}, "_id username profileImage");
+    console.log("response:", users);
 
-    res.status(200).json({ users })
+    res.status(200).json({ users });
   } catch (err) {
-     console.log("error:", err)
-     res.status(500).json({ message: "Erro ao buscar usuarios" })
+    console.log("error:", err);
+    res.status(500).json({ message: "Erro ao buscar usuarios" });
   }
-})
+});
 
 // google login
 router.post("/google-login", async (req, res) => {
@@ -73,11 +74,30 @@ router.post("/google-login", async (req, res) => {
   }
 });
 
+
+// helper: atualizar cache de contagem
+async function refreshMembersCount(churchId) {
+  const count = await ChurchMembership.countDocuments({
+    church: churchId,
+    status: "active",
+  });
+  await Church.findByIdAndUpdate(churchId, { membersCount: count });
+}
+
 // User Signup
 // User Signup
 router.post("/signup", async (req, res) => {
-  console.log("rota signup encontrada");
-  const { username, email, password, phone, profileImage } = req.body;
+  console.log("🟢🟢🟢 rota signup encontrada");
+  const {
+    username,
+    email,
+    password,
+    phone,
+    profileImage,
+    church: churchId,
+  } = req.body;
+
+  console.log("signup route...")
 
   console.log("Received fields:", {
     username,
@@ -86,6 +106,7 @@ router.post("/signup", async (req, res) => {
     password,
     profileImage,
     isVerified: true,
+    church: churchId,
   });
 
   try {
@@ -102,6 +123,19 @@ router.post("/signup", async (req, res) => {
     if (userExists) {
       console.log("User already exists with email:", email);
       return res.status(400).json({ message: "Usuário já existente" });
+    }
+
+    // se veio churchId, valida formato e existência
+    let validChurchId = null;
+    if (churchId) {
+      if (!mongoose.isValidObjectId(churchId)) {
+        return res.status(400).json({ message: "church inválida" });
+      }
+      const exists = await Church.exists({ _id: churchId });
+      if (!exists) {
+        return res.status(404).json({ message: "Igreja não encontrada" });
+      }
+      validChurchId = churchId;
     }
 
     // Generate verification token
@@ -121,26 +155,36 @@ router.post("/signup", async (req, res) => {
       profileImage: profileImage || "", // Optional profile image
       verificationToken, // Store the generated verification token
       isVerified: false, // User is not verified until they confirm the email
+      church: validChurchId || null,
     });
+
+    // se tem igreja -> cria/atualiza vínculo e atualiza contagem
+    if (validChurchId) {
+      await ChurchMembership.findOneAndUpdate(
+        { user: user._id, church: validChurchId },
+        {
+          user: user._id,
+          church: validChurchId,
+          role: "member",
+          status: "active",
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      await refreshMembersCount(validChurchId);
+    }
 
     await user.save();
     console.log("User saved successfully");
 
+    // console.log("Sending verification link to email:", email);
+    // const verificationUrl = `${process.env.VERIFICATION_URL}${verificationToken}`;
+
+    // // Send the email with the verification link
+    // await sendVerificationLink(email, verificationUrl);
+
     return res.status(201).json({
       message: `Usuário criado com sucesso! Verifique seu email para confirmar sua conta. ${user._id}`,
       userId: user._id,
-    });
-
-    // qualquer coisa remova esse return
-    return;
-    console.log("Sending verification link to email:", email);
-    const verificationUrl = `${process.env.VERIFICATION_URL}${verificationToken}`;
-
-    // Send the email with the verification link
-    await sendVerificationLink(email, verificationUrl);
-
-    res.status(201).json({
-      message: `Usuário criado com sucesso! Verifique seu email para confirmar sua conta. ${user._id}`,
     });
   } catch (error) {
     console.log("Error during signup:", error.message);
@@ -798,7 +842,7 @@ router.post("/friendRequest/:friendId", protect, async (req, res) => {
   await user.save();
   await friend.save();
 
-   // ✅ Notificação com socket
+  // ✅ Notificação com socket
   const io = req.app.get("io");
 
   // ✅ Aqui: criar notificação
@@ -989,7 +1033,6 @@ router.get("/checkUnreadMainChat", protect, async (req, res) => {
     res.status(500).json({ message: "Erro ao verificar mensagens." });
   }
 });
-
 
 router.post("/markMainChatAsRead", protect, async (req, res) => {
   console.log("markMainChatAsRead route reached");

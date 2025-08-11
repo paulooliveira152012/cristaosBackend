@@ -111,6 +111,11 @@ const userSchema = new mongoose.Schema(
       of: Date,
       default: {},
     },
+
+    church: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Church"
+    }
   },
   { timestamps: true }
 ); // Automatically adds `createdAt` and `updatedAt` fields
