@@ -71,6 +71,76 @@ router.post("/create", async (req, res) => {
   }
 });
 
+// edit listing
+// PUT /edit/:id
+router.put("/edit/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = req.body || {};
+
+    const listing = await Listing.findById(id);
+    if (!listing) return res.status(404).json({ message: "Listagem não encontrada" });
+
+    // Bloqueia campos sensíveis
+    delete body.type;
+    delete body.userId;
+    delete body.votes;
+    if (body.poll) delete body.poll.votes;
+
+    const updates = {};
+
+    switch (listing.type) {
+      case "blog":
+        if (typeof body.blogTitle === "string") updates.blogTitle = body.blogTitle.trim();
+        if (typeof body.blogContent === "string") updates.blogContent = body.blogContent;
+        if (typeof body.imageUrl === "string") updates.imageUrl = body.imageUrl.trim();
+        break;
+
+      case "image":
+        if (typeof body.imageUrl === "string") updates.imageUrl = body.imageUrl.trim();
+        if (typeof body.caption === "string") updates.caption = body.caption;
+        break;
+
+      case "poll":
+        if (body.poll && typeof body.poll.question === "string") {
+          updates["poll.question"] = body.poll.question.trim();
+        }
+        if (body.poll && Array.isArray(body.poll.options)) {
+          const options = body.poll.options.map(o => String(o).trim()).filter(Boolean);
+          if (options.length < 2) {
+            return res.status(400).json({ message: "Enquete precisa de pelo menos 2 opções." });
+          }
+          updates["poll.options"] = options;
+          if (body.resetVotes === true) updates["poll.votes"] = [];
+        }
+        break;
+
+      default:
+        return res.status(400).json({ message: `Tipo não suportado: ${listing.type}` });
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ message: "Nada para atualizar." });
+    }
+
+    updates.updatedAt = new Date();
+
+    const updatedListing = await Listing.findByIdAndUpdate(
+      id,
+      { $set: updates },
+      { new: true }
+    )
+      .populate("userId", "username profileImage")
+      .lean();
+
+    res.json({ updatedListing });
+  } catch (err) {
+    console.error("PUT /edit/:id error:", err);
+    res.status(500).json({ message: "Erro ao atualizar listagem" });
+  }
+});
+
+
 // http://localhost:5001/api/listings/users/:userId
 // http://localhost:5001/api/listings/users/66ea3b118be39848e1d002f4
 
