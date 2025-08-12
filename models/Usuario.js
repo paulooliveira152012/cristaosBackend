@@ -3,6 +3,34 @@ const mongoose = require("mongoose");
 // Define the user schema
 const userSchema = new mongoose.Schema(
   {
+    firstName: {
+      type: String,
+      required: true,
+      unique: false,
+      trim: true,
+    },
+
+    lastName: {
+      type: String,
+      required: false,
+      unique: false,
+      trim: true,
+    },
+
+    city: {
+      type: String,
+      required: false,
+      unique: false,
+      trim: true,
+    },
+
+    state: {
+      type: String,
+      required: false,
+      unique: false,
+      trim: true,
+    },
+
     username: {
       type: String,
       required: true,

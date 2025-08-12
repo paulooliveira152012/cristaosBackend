@@ -81,12 +81,16 @@ router.get("/users/:userId", async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const user = await User.findById(userId);
+    const user = await User.findById(userId)
+    .populate({ path: "church", select: "name denomination _id" })
+    .lean()
+
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const listings = await Listing.find({ userId })
       .populate("userId", "username profileImage")
-      .populate("poll.votes.userId", "profileImage username");
+      .populate("poll.votes.userId", "profileImage username")
+      .lean();
 
     res.status(200).json({ user, listings });
   } catch (error) {

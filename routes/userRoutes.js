@@ -74,7 +74,6 @@ router.post("/google-login", async (req, res) => {
   }
 });
 
-
 // helper: atualizar cache de contagem
 async function refreshMembersCount(churchId) {
   const count = await ChurchMembership.countDocuments({
@@ -90,6 +89,10 @@ router.post("/signup", async (req, res) => {
   console.log("🟢🟢🟢 rota signup encontrada");
   const {
     username,
+    firstName,
+    lastName,
+    city,
+    state,
     email,
     password,
     phone,
@@ -97,10 +100,14 @@ router.post("/signup", async (req, res) => {
     church: churchId,
   } = req.body;
 
-  console.log("signup route...")
+  console.log("signup route...");
 
   console.log("Received fields:", {
     username,
+    firstName,
+    lastName,
+    city,
+    state,
     email,
     phone,
     password,
@@ -149,6 +156,10 @@ router.post("/signup", async (req, res) => {
     // Create new user
     const user = new User({
       username,
+      firstName,
+      lastName,
+      city,
+      state,
       email,
       phone,
       password: hashedPassword,
