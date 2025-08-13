@@ -50,6 +50,7 @@ router.get("/getAllUsers", async (req, res) => {
 
 // google login
 router.post("/google-login", async (req, res) => {
+  console.log("🥭🥭🥭 logging in via google ")
   try {
     const { credential, token, rememberMe } = req.body;
     const idToken = credential || token;
