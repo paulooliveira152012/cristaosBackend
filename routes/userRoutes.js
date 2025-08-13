@@ -463,11 +463,19 @@ router.post("/login", async (req, res) => {
     console.log("token JWT gerado:", token);
 
     // Enviar o token como cookie (modo dev)
+    // res.cookie("token", token, {
+    //   httpOnly: true,
+    //   secure: false,
+    //   sameSite: "Lax",
+    //   maxAge: 1000 * 60 * 60 * 24 * 7, // 7 dias
+    // });
+
+    // Enviar o token como cookie (modo prod)
     res.cookie("token", token, {
       httpOnly: true,
-      secure: false,
-      sameSite: "Lax",
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 dias
+      secure: true,
+      sameSite: "None",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     // Retornar dados do usuário sem senha
@@ -481,14 +489,6 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// Enviar o token como cookie
-// Produção:
-// res.cookie("token", token, {
-//   httpOnly: true,
-//   secure: true,
-//   sameSite: "None",
-//   maxAge: 7 * 24 * 60 * 60 * 1000,
-// });
 
 // debug route for cookies set up
 router.get("/debug/cookies", (req, res) => {
