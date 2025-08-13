@@ -1,12 +1,12 @@
 // chatRoutes.js
 const express = require("express");
 const router = express.Router();
-const User = require("../models/Usuario");
+const User = require("../models/User");
 const Conversation = require("../models/Conversation");
 const Message = require("../models/Message");
 const Notification = require("../models/Notification");
 // const createNotification = require("../utils/notificationUtils");
-const createNotificationUtil = require("../utils/notificationUtils")
+const createNotificationUtil = require("../utils/notificationUtils");
 const { protect } = require("../utils/auth");
 
 // get dm chats from user
@@ -52,7 +52,7 @@ router.get("/userConversations/:userId", async (req, res) => {
 // 1. Send chat request
 // 1. Send chat request
 router.post("/sendChatRequest", async (req, res) => {
-  console.log("send chat request route...")
+  console.log("send chat request route...");
   const { requester, requested } = req.body;
   if (!requester || !requested)
     return res.status(400).json({ error: "Missing requester or requested ID" });
@@ -71,7 +71,7 @@ router.post("/sendChatRequest", async (req, res) => {
     const requesterUsername = requesterObject.username;
     console.log("requesterUsername:", requesterUsername);
 
-    const io = req.app.get("io")
+    const io = req.app.get("io");
 
     // 🔔 Cria notificação para o usuário solicitado
     await createNotificationUtil({
@@ -274,11 +274,11 @@ router.post("/reinvite", protect, async (req, res) => {
 
     const requesterObject = await User.findById(requester);
 
-    console.log("🟢🟣⚪️ requesterObject:", requesterObject)
+    console.log("🟢🟣⚪️ requesterObject:", requesterObject);
 
     const requestedObject = await User.findById(requested);
 
-    console.log("🟢🟣⚪️ requestedObject:", requestedObject)
+    console.log("🟢🟣⚪️ requestedObject:", requestedObject);
 
     // 🔔 Reutiliza o mesmo tipo de notificação
     await createNotification({

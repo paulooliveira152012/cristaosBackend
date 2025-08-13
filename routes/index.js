@@ -13,6 +13,7 @@ const adManagementRoutes = require('./adManagementRoutes');
 const admChurchRoutes = require('./adminChurchRoutes')
 const churchRoutes = require('./churchRoutes')
 const interMeetingRoutes = require('./interMeetingsRoutes')
+const muralRoutes = require('./muralRoutes')
 
 
 const router = express.Router();
@@ -31,6 +32,7 @@ router.use("/adManagement", adManagementRoutes);
 router.use("/admChurch", admChurchRoutes)
 router.use("/church", churchRoutes)
 router.use("/intermeeting", interMeetingRoutes)
+router.use("/mural", muralRoutes)
 
 module.exports = router;
 

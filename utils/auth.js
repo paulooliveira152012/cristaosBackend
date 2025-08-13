@@ -1,13 +1,13 @@
 const jwt = require("jsonwebtoken");
-const User = require("../models/Usuario");
+const User = require("../models/User");
 
 // ✅ Middleware para proteger rotas privadas
 const protect = async (req, res, next) => {
-  console.log("na rota protect...")
+  console.log("na rota protect...");
   try {
     const token = req.cookies.token;
 
-    console.log("token:", token)
+    console.log("token:", token);
 
     if (!token) return res.status(401).json({ error: "Não autorizado." });
 

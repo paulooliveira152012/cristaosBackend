@@ -1,19 +1,21 @@
 // utils/googleAuth.js
 const { OAuth2Client } = require("google-auth-library");
-const User = require("../models/Usuario");
+const User = require("../models/User");
 const jwt = require("jsonwebtoken");
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-const slug = (s) => String(s || "")
-  .toLowerCase()
-  .replace(/[^a-z0-9._-]+/g, "");
+const slug = (s) =>
+  String(s || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "");
 
 const splitNames = (payload) => {
   const emailLocal = (payload.email || "").split("@")[0] || "user";
   const full = payload.name || "";
   const given = payload.given_name || full.split(/\s+/)[0] || emailLocal;
-  const family = payload.family_name || full.split(/\s+/).slice(1).join(" ") || "";
+  const family =
+    payload.family_name || full.split(/\s+/).slice(1).join(" ") || "";
   return { firstName: given, lastName: family };
 };
 
@@ -62,7 +64,8 @@ async function findOrCreateUserFromGooglePayload(payload) {
     if (user.lastName == null) patch.lastName = lastName; // permite vazio
     if (!user.username) patch.username = await uniqueUsername(firstName);
     if (!user.googleId) patch.googleId = payload.sub;
-    if (!user.profileImage && payload.picture) patch.profileImage = payload.picture;
+    if (!user.profileImage && payload.picture)
+      patch.profileImage = payload.picture;
     if (Object.keys(patch).length) user.set(patch);
   }
 

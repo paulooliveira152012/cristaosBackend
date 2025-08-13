@@ -4,7 +4,7 @@ const Reel = require("../models/Reels");
 const Comment = require("../models/Comment");
 const router = express.Router();
 // const User = require("../models/User");
-const User = require("../models/Usuario");
+const User = require("../models/User");
 // const createNotification = require("../utils/notificationUtils");
 // const createNotificationController = require("../controllers/notificationController");
 const createNotificationUtil = require("../utils/notificationUtils");
@@ -27,10 +27,6 @@ router.get("/alllistings", async (req, res) => {
   }
 });
 
-
-
-
-
 // Create Listing
 router.post("/create", async (req, res) => {
   const {
@@ -46,25 +42,23 @@ router.post("/create", async (req, res) => {
   } = req.body;
   console.log("create route reached!");
   try {
-      const newListing = new Listing({
-        userId,
-        type,
-        blogTitle,
-        blogContent,
-        imageUrl,
-        link,
-        poll,
-        tags,
-        linkDescription,
-      });
+    const newListing = new Listing({
+      userId,
+      type,
+      blogTitle,
+      blogContent,
+      imageUrl,
+      link,
+      poll,
+      tags,
+      linkDescription,
+    });
 
-      await newListing.save();
-      return res
-        .status(201)
-        .json({
-          message: "Listing created successfully!",
-          listing: newListing,
-        });
+    await newListing.save();
+    return res.status(201).json({
+      message: "Listing created successfully!",
+      listing: newListing,
+    });
   } catch (error) {
     console.error("Error creating listing:", error);
     res.status(500).json({ message: "Error creating listing", error });
@@ -79,7 +73,8 @@ router.put("/edit/:id", async (req, res) => {
     const body = req.body || {};
 
     const listing = await Listing.findById(id);
-    if (!listing) return res.status(404).json({ message: "Listagem não encontrada" });
+    if (!listing)
+      return res.status(404).json({ message: "Listagem não encontrada" });
 
     // Bloqueia campos sensíveis
     delete body.type;
@@ -91,13 +86,17 @@ router.put("/edit/:id", async (req, res) => {
 
     switch (listing.type) {
       case "blog":
-        if (typeof body.blogTitle === "string") updates.blogTitle = body.blogTitle.trim();
-        if (typeof body.blogContent === "string") updates.blogContent = body.blogContent;
-        if (typeof body.imageUrl === "string") updates.imageUrl = body.imageUrl.trim();
+        if (typeof body.blogTitle === "string")
+          updates.blogTitle = body.blogTitle.trim();
+        if (typeof body.blogContent === "string")
+          updates.blogContent = body.blogContent;
+        if (typeof body.imageUrl === "string")
+          updates.imageUrl = body.imageUrl.trim();
         break;
 
       case "image":
-        if (typeof body.imageUrl === "string") updates.imageUrl = body.imageUrl.trim();
+        if (typeof body.imageUrl === "string")
+          updates.imageUrl = body.imageUrl.trim();
         if (typeof body.caption === "string") updates.caption = body.caption;
         break;
 
@@ -106,9 +105,13 @@ router.put("/edit/:id", async (req, res) => {
           updates["poll.question"] = body.poll.question.trim();
         }
         if (body.poll && Array.isArray(body.poll.options)) {
-          const options = body.poll.options.map(o => String(o).trim()).filter(Boolean);
+          const options = body.poll.options
+            .map((o) => String(o).trim())
+            .filter(Boolean);
           if (options.length < 2) {
-            return res.status(400).json({ message: "Enquete precisa de pelo menos 2 opções." });
+            return res
+              .status(400)
+              .json({ message: "Enquete precisa de pelo menos 2 opções." });
           }
           updates["poll.options"] = options;
           if (body.resetVotes === true) updates["poll.votes"] = [];
@@ -116,7 +119,9 @@ router.put("/edit/:id", async (req, res) => {
         break;
 
       default:
-        return res.status(400).json({ message: `Tipo não suportado: ${listing.type}` });
+        return res
+          .status(400)
+          .json({ message: `Tipo não suportado: ${listing.type}` });
     }
 
     if (Object.keys(updates).length === 0) {
@@ -140,7 +145,6 @@ router.put("/edit/:id", async (req, res) => {
   }
 });
 
-
 // http://localhost:5001/api/listings/users/:userId
 // http://localhost:5001/api/listings/users/66ea3b118be39848e1d002f4
 
@@ -152,8 +156,8 @@ router.get("/users/:userId", async (req, res) => {
 
   try {
     const user = await User.findById(userId)
-    .populate({ path: "church", select: "name denomination _id" })
-    .lean()
+      .populate({ path: "church", select: "name denomination _id" })
+      .lean();
 
     if (!user) return res.status(404).json({ message: "User not found" });
 

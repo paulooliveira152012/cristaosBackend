@@ -6,10 +6,9 @@ const {
   sendVerificationLink,
   sendEmailUpdateVerification,
   sendResetLink,
-
 } = require("../utils/emailService");
 const mongoose = require("mongoose");
-const User = require("../models/Usuario");
+const User = require("../models/User");
 const Notification = require("../models/Notification");
 const DirectMessageRequest = require("../models/DirectMessage");
 const Conversation = require("../models/Conversation");
@@ -50,7 +49,7 @@ router.get("/getAllUsers", async (req, res) => {
 
 // google login
 router.post("/google-login", async (req, res) => {
-  console.log("🥭🥭🥭 logging in via google ")
+  console.log("🥭🥭🥭 logging in via google ");
   try {
     const { credential, token, rememberMe } = req.body;
     const idToken = credential || token;
@@ -60,7 +59,9 @@ router.post("/google-login", async (req, res) => {
     const user = await findOrCreateUserFromGooglePayload(payload);
 
     const expiresIn = rememberMe ? "30d" : "7d";
-    const maxAge = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+    const maxAge = rememberMe
+      ? 30 * 24 * 60 * 60 * 1000
+      : 7 * 24 * 60 * 60 * 1000;
     const jwtToken = createJwtForUser(user._id, expiresIn);
 
     const isProd = process.env.NODE_ENV === "production";
@@ -76,7 +77,9 @@ router.post("/google-login", async (req, res) => {
     res.json(safe);
   } catch (err) {
     console.error("google-login error:", err);
-    res.status(401).json({ message: "Token inválido ou falha na autenticação" });
+    res
+      .status(401)
+      .json({ message: "Token inválido ou falha na autenticação" });
   }
 });
 
@@ -92,7 +95,7 @@ async function refreshMembersCount(churchId) {
 // User Signup
 // User Signup
 router.post("/signup", async (req, res) => {
-  console.log("🟢🟢🟢 rota signup encontrada");
+  console.log(" rota signup encontrada");
   const {
     username,
     firstName,
@@ -494,7 +497,6 @@ router.post("/login", async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-
 
 // debug route for cookies set up
 router.get("/debug/cookies", (req, res) => {
@@ -1020,7 +1022,7 @@ router.get("/:userId/friends", async (req, res) => {
 
 // route for main chat
 router.get("/checkUnreadMainChat", protect, async (req, res) => {
-  console.log("🟢🟢🟢 checking for unread messages route...");
+  console.log(" checking for unread messages route...");
 
   try {
     const user = await User.findById(req.user._id);

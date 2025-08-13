@@ -25,7 +25,7 @@ const {
 const removeUserFromRoomDB = require("../utils/removeUserFromRoomDB");
 
 const Room = require("../models/Room");
-const User = require("../models/Usuario");
+const User = require("../models/User");
 
 const privateChatPresence = {}; // Ex: { conversationId: [userId1, userId2] }
 
@@ -444,7 +444,7 @@ module.exports = function (io) {
     // Usuário entra numa conversa privada
     socket.on("joinPrivateChat", async ({ conversationId, userId }) => {
       console.log(
-        `🟢🟢🟢🟢 conversationId: ${conversationId}, userId: ${userId}`
+        `conversationId: ${conversationId}, userId: ${userId}`
       );
       socket.join(conversationId);
       socket.join(userId.toString());

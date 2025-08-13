@@ -2,7 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const Comment = require("../models/Comment");
 const Listing = require("../models/Listing");
-const User = require("../models/Usuario");
+const User = require("../models/User");
 const createNotificationUtil = require("../utils/notificationUtils");
 const router = express.Router();
 
@@ -324,7 +324,7 @@ router.put("/comment/like/:parentCommentId/:replyId", async (req, res) => {
     const io = req.app.get("io");
     const user = await User.findById(userId);
 
-    console.log("creating notification...")
+    console.log("creating notification...");
     // Enviar notificação apenas se for novo like e não for o próprio autor da resposta
     if (!isLiked && reply.user.toString() !== userId.toString()) {
       await createNotificationUtil({
