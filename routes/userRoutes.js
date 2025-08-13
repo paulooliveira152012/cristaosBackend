@@ -6,6 +6,7 @@ const {
   sendVerificationLink,
   sendEmailUpdateVerification,
   sendResetLink,
+
 } = require("../utils/emailService");
 const mongoose = require("mongoose");
 const User = require("../models/Usuario");
@@ -27,7 +28,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 
 const {
   verifyGoogleToken,
-  findOrCreateUserFromGoogle,
+  findOrCreateUserFromGooglePayload,
   createJwtForUser,
 } = require("../utils/googleAuth");
 
@@ -49,28 +50,32 @@ router.get("/getAllUsers", async (req, res) => {
 
 // google login
 router.post("/google-login", async (req, res) => {
-  const { token } = req.body;
-
   try {
-    const googleData = await verifyGoogleToken(token);
-    const user = await findOrCreateUserFromGoogle(googleData);
-    const jwtToken = createJwtForUser(user._id);
+    const { credential, token, rememberMe } = req.body;
+    const idToken = credential || token;
+    if (!idToken) return res.status(400).json({ message: "Token ausente" });
 
-    // Remover senha antes de enviar
-    const userObj = user.toObject();
-    delete userObj.password;
+    const payload = await verifyGoogleToken(idToken);
+    const user = await findOrCreateUserFromGooglePayload(payload);
 
+    const expiresIn = rememberMe ? "30d" : "7d";
+    const maxAge = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+    const jwtToken = createJwtForUser(user._id, expiresIn);
+
+    const isProd = process.env.NODE_ENV === "production";
     res.cookie("token", jwtToken, {
       httpOnly: true,
-      secure: false,
-      sameSite: "Lax",
-      maxAge: 1000 * 60 * 60 * 24 * 7,
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
+      maxAge,
+      path: "/",
     });
 
-    res.status(200).json(userObj);
-  } catch (error) {
-    console.error("Erro no login com Google:", error);
-    res.status(401).json({ error: "Falha na autenticação com Google." });
+    const { password, ...safe } = user.toObject();
+    res.json(safe);
+  } catch (err) {
+    console.error("google-login error:", err);
+    res.status(401).json({ message: "Token inválido ou falha na autenticação" });
   }
 });
 
