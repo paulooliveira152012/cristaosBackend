@@ -76,14 +76,14 @@ router.put("/admEditAd/:addId", verifyToken, verifyLeader, async (req, res) => {
 
 // Rota para listar todas as postagens (acesso de líder)
 router.get("/admFetchAds", async (req, res) => {
-  console.log(" 🟢 🟢 🟢 GET ADM ROUTE REACHED")
+  // console.log(" 🟢 🟢 🟢 GET ADM ROUTE REACHED")
   try {
     const adds = await Add.find().populate("createdBy", "username");
-    console.log("Fetched adds:", adds);
+    // console.log("Fetched adds:", adds);
     if (!adds || adds.length === 0) {
       return res.status(404).json({ message: "Nenhuma postagem encontrada." });
     }
-    console.log("Fetched adds:", adds);
+    // console.log("Fetched adds:", adds);
     res.status(200).json(adds);
   } catch (error) {
     console.error("Erro ao buscar postagens:", error);

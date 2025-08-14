@@ -38,7 +38,7 @@ router.get("/getAllUsers", async (req, res) => {
 
   try {
     const users = await User.find({}, "_id username profileImage");
-    console.log("response:", users);
+    // console.log("response:", users);
 
     res.status(200).json({ users });
   } catch (err) {

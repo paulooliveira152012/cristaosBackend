@@ -29,6 +29,8 @@ const User = require("../models/User");
 
 const privateChatPresence = {}; // Ex: { conversationId: [userId1, userId2] }
 
+let ioRef;
+
 // wrapper para iniciar socket
 module.exports = function (io) {
   // liveUsers online globalmente
@@ -38,12 +40,16 @@ module.exports = function (io) {
   // roomSpeakers para quem esta falando na sala
   const roomSpeakers = {};
 
+  ioRef = io;
+
   // Function to initialize a room if it doesn't exist
   const initializeRoomIfNeeded = (roomId) => {
     if (!liveRoomUsers[roomId]) {
       liveRoomUsers[roomId] = []; // Create an empty array for the room
     }
   };
+
+  
 
   // 1 - Quando um novo usuário se conecta, criamos um socket exclusivo para ele
   io.on("connection", (socket) => {
@@ -76,7 +82,7 @@ module.exports = function (io) {
       //   emitError("Invalid user data received for login.");
       //   return;
       // }
-      console.log("user:", user);
+      // console.log("user:", user);
       addUser(socket.id, user);
       emitOnlineUsers(io);
     });
@@ -486,6 +492,7 @@ module.exports = function (io) {
     // Usuário sai
     // Usuário sai da conversa privada
     socket.on("leavePrivateChat", ({ conversationId, userId, username }) => {
+      console.log("socket ao sair da conversa acionado")
       socket.leave(conversationId);
       socket.leave(userId.toString());
       console.log(`🔴 ${username} saiu da conversa privada: ${conversationId}`);
@@ -534,4 +541,15 @@ module.exports = function (io) {
       });
     });
   });
+};
+
+// permitir acesso ao io em controllers
+module.exports.getIO = () => ioRef;
+
+// helpers opcionais (em vez de duplicar em todo controller)
+module.exports.emitParticipantChanged = (conversationId) => {
+  if (ioRef) ioRef.to(conversationId).emit("dm:participantChanged", { conversationId });
+};
+module.exports.emitAccepted = (conversationId, by) => {
+  if (ioRef) ioRef.to(conversationId).emit("dm:accepted", { conversationId, by });
 };

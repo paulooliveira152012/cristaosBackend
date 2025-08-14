@@ -9,6 +9,23 @@ const Notification = require("../models/Notification");
 const createNotificationUtil = require("../utils/notificationUtils");
 const { protect } = require("../utils/auth");
 
+function emitParticipantChanged(req, conversationId) {
+  const io = req.app.get("io");
+  if (io)
+    io.to(conversationId.toString()).emit("dm:participantChanged", {
+      conversationId,
+    });
+}
+
+function emitAccepted(req, conversationId, byUserId) {
+  const io = req.app.get("io");
+  if (io)
+    io.to(conversationId.toString()).emit("dm:accepted", {
+      conversationId,
+      by: byUserId,
+    });
+}
+
 // get dm chats from user
 // GET /api/dm/userConversations/:userId
 router.get("/userConversations/:userId", async (req, res) => {
@@ -151,6 +168,15 @@ router.post("/startNewConversation", protect, async (req, res) => {
 
         console.log("setting leavingUser back to null");
         conversation.leavingUser = null;
+
+        if (
+          !conversation.participants.map(String).includes(String(requested))
+        ) {
+          conversation.participants.push(requested);
+        }
+        // quem aceitou está voltando; zera leavingUser
+        conversation.leavingUser = null;
+
         await conversation.save();
 
         await User.findByIdAndUpdate(requester, {
@@ -162,6 +188,10 @@ router.post("/startNewConversation", protect, async (req, res) => {
         if (notificationId) {
           await Notification.findByIdAndDelete(notificationId);
         }
+
+        // 🔔 Eventos de tempo real
+        emitAccepted(req, conversationId, req.user._id);
+        emitParticipantChanged(req, conversationId);
 
         // gerar a mensagem de reentrada:
         // const systemMsg = await Message.create({
@@ -192,6 +222,8 @@ router.post("/startNewConversation", protect, async (req, res) => {
     });
 
     if (existingConversation) {
+      // Já existia — garanta UI atualizada
+      emitParticipantChanged(req, existingConversation._id);
       return res.status(200).json({
         message: "Conversation already exists",
         conversation: existingConversation,
@@ -211,6 +243,9 @@ router.post("/startNewConversation", protect, async (req, res) => {
     if (notificationId) {
       await Notification.findByIdAndDelete(notificationId);
     }
+
+    // 🔔 Nova conversa criada
+    emitParticipantChanged(req, newConversation._id);
 
     res
       .status(201)
@@ -244,7 +279,7 @@ router.post("/reinvite", protect, async (req, res) => {
   console.log("conversationId:", conversationId);
 
   try {
-    const io = req.app.get("io");
+    // const io = req.app.get("io");
     const conversation = await Conversation.findById(conversationId);
 
     if (!conversation || !conversation.leavingUser) {
@@ -255,13 +290,16 @@ router.post("/reinvite", protect, async (req, res) => {
     const requested = conversation.leavingUser;
 
     //  // Garante que o usuário ainda não está na conversa
-    if (!conversation.participants.includes(requested)) {
-      conversation.participants.push(requested);
-    }
+    // if (!conversation.participants.includes(requested)) {
+    // conversation.participants.push(requested);
+    // }
 
     // Limpa o leavingUser
-    conversation.leavingUser = null;
-    await conversation.save();
+    // conversation.leavingUser = null;
+    // await conversation.save();
+    // ⚠️ Não recoloca nos participants aqui.
+    // Apenas registra pedido de chat para o fluxo de aceite.
+    // (Aceite via /startNewConversation com conversationId fará o reingresso.)
 
     // Atualiza campos auxiliares de convite (opcional, se quiser rastrear)
     await User.findByIdAndUpdate(requester, {
@@ -281,7 +319,7 @@ router.post("/reinvite", protect, async (req, res) => {
     console.log("🟢🟣⚪️ requestedObject:", requestedObject);
 
     // 🔔 Reutiliza o mesmo tipo de notificação
-    await createNotification({
+    await createNotificationUtil({
       recipient: requested,
       fromUser: requester,
       type: "chat_reinvite",
@@ -290,36 +328,30 @@ router.post("/reinvite", protect, async (req, res) => {
     });
 
     // ✅ Criar mensagem de sistema ANTES de emitir
-    const systemMsg = await Message.create({
-      conversationId: conversationId,
-      userId: requested, // ← ESSENCIAL!
-      username: requestedObject.username,
-      profileImage: requestedObject.profileImage || "",
-      message: `${requestedObject.username} voltou para a conversa.`,
-      timestamp: new Date(),
-      system: true,
-    });
+    // const systemMsg = await Message.create({
+    //   conversationId: conversationId,
+    //   userId: requested, // ← ESSENCIAL!
+    //   username: requestedObject.username,
+    //   profileImage: requestedObject.profileImage || "",
+    //   message: `${requestedObject.username} voltou para a conversa.`,
+    //   timestamp: new Date(),
+    //   system: true,
+    // });
 
-    console.log("📦 Mensagem de retorno criada:", systemMsg);
+    // console.log("📦 Mensagem de retorno criada:", systemMsg);
 
-    console.log("emitindo mensagem via io...");
-    const fullSystemMsg = await Message.findById(systemMsg._id);
+    // console.log("emitindo mensagem via io...");
+    // const fullSystemMsg = await Message.findById(systemMsg._id);
 
-    console.log("🔎 Mensagem completa para emitir:", fullSystemMsg);
+    // console.log("🔎 Mensagem completa para emitir:", fullSystemMsg);
 
-    conversation.participants.forEach((participantId) => {
-      console.log("📢 Emitindo para:", participantId.toString());
-      io.to(participantId.toString()).emit("newPrivateMessage", fullSystemMsg);
-    });
+    // conversation.participants.forEach((participantId) => {
+    //   console.log("📢 Emitindo para:", participantId.toString());
+    //   io.to(participantId.toString()).emit("newPrivateMessage", fullSystemMsg);
+    // });
 
     // envia para todos os sockets que entraram na sala dessa conversa
-    io.to(conversationId.toString()).emit("newPrivateMessage", fullSystemMsg);
-
-    io.to(conversationId).emit("debugLog", {
-      source: "reinvite",
-      message: "🟢 DEBUG DEBUG DEBUG DEBUG",
-      timestamp: new Date().toISOString(),
-    });
+    // io.to(conversationId.toString()).emit("newPrivateMessage", fullSystemMsg);
 
     res.status(200).json({
       message: "Convite reenviado com sucesso",
@@ -475,6 +507,13 @@ router.delete("/leaveChat/:conversationId", protect, async (req, res) => {
     if (conversation.participants.length === 0) {
       // Ninguém mais na conversa? Deleta!
       await Conversation.findByIdAndDelete(conversationId);
+
+        // opcional: avisar quem ainda está conectado à sala (se houver)
+      emitParticipantChanged(req, conversationId, {
+        removedUserId: userId,
+        participants: [],
+        leavingUser: userId,
+      });
       return res.json({
         message: "Conversa excluída (sem participantes restantes).",
       });
@@ -498,27 +537,23 @@ router.delete("/leaveChat/:conversationId", protect, async (req, res) => {
     // Busca com todos os campos completos (inclusive _id e system)
     const fullSystemMsg = await Message.findById(systemMsg._id);
 
-    // Emitir mensagem para os outros participantes
+    
+    // 🔊 emita para a SALA DA CONVERSA (não por id do usuário)
     const io = req.app.get("io");
-
     if (io) {
-      conversation.participants.forEach((participantId) => {
-        io.to(participantId.toString()).emit(
-          "newPrivateMessage",
-          fullSystemMsg
-        );
-
-        // Novo evento apenas para debug ou efeito específico
-        io.to(participantId.toString()).emit("userLeftPrivateChat", {
-          conversationId,
-          leftUser: {
-            id: req.user._id,
-            username: username,
-          },
-        });
-      });
+      io.to(conversationId).emit("newPrivateMessage", fullSystemMsg);
     }
 
+       // 🔔 payload completo — front pode reagir de imediato (sem esperar fetch)
+    emitParticipantChanged(req, conversationId, {
+      removedUserId: userId,
+      participants: conversation.participants.map((id) => id.toString()),
+      leavingUser: userId,
+    });
+
+    // return res.json({ message: "Você saiu da conversa." });
+    
+    
     return res.json({ message: "Você saiu da conversa." });
   } catch (err) {
     console.error("Erro ao sair da conversa:", err);

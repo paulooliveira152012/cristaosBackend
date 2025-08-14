@@ -40,7 +40,7 @@ router.post("/newMuralMessage/:userId", /*protect,*/ async (req, res) => {
 
 // GET: listar mural (paginação por cursor de data/id)
 router.get("/getMuralContent/:userId", async (req, res) => {
-  console.log("🟢🟢🟢 getting mural content...")
+  // console.log("🟢🟢🟢 getting mural content...")
   try {
     const { userId } = req.params;
     const limit = Math.min(Number(req.query.limit) || 20, 50);

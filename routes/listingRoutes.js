@@ -14,7 +14,7 @@ const { uploadToS3 } = require("../utils/s3Uploader"); // sua função já exist
 // Get All Listings
 // Get All Listings
 router.get("/alllistings", async (req, res) => {
-  console.log("You've reached the backend to fetch all items!");
+  // console.log("You've reached the backend to fetch all items!");
   try {
     const listings = await Listing.find()
       .populate("userId", "username profileImage") // criador da postagem
@@ -153,6 +153,8 @@ router.put("/edit/:id", async (req, res) => {
 router.get("/users/:userId", async (req, res) => {
   console.log("user's listings route hit!");
   const { userId } = req.params;
+
+  console.log("user:", userId);
 
   try {
     const user = await User.findById(userId)

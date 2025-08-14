@@ -7,7 +7,7 @@ const addUser = (socketId, user) => {
     return;
   }
 
-  console.log("🟢 Adicionando user online:", user.username, user._id);
+  // console.log("🟢 Adicionando user online:", user.username, user._id);
   if (!onlineUsers[user._id]) {
     // If the user is not in the list, add them and initialize socketIds
     onlineUsers[user._id] = {
@@ -43,17 +43,17 @@ const removeUser = (socketId) => {
 
 // Emit the list of online users to all clients
 const emitOnlineUsers = (io) => {
-  console.log(
-    "📡 Enviando lista de onlineUsers:",
-    Object.values(onlineUsers).map((u) => u.username)
-  );
+  // console.log(
+  //   "📡 Enviando lista de onlineUsers:",
+  //   Object.values(onlineUsers).map((u) => u.username)
+  // );
 
   const list = Object.values(onlineUsers).map((user) => {
     const { socketIds, ...userWithoutSockets } = user;
     return userWithoutSockets;
   });
 
-  console.log("📢 Enviando lista de onlineUsers:", list);
+  // console.log("📢 Enviando lista de onlineUsers:", list);
 
   io.emit("onlineUsers", list);
 };

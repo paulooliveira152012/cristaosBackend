@@ -3,11 +3,11 @@ const User = require("../models/User");
 
 // ✅ Middleware para proteger rotas privadas
 const protect = async (req, res, next) => {
-  console.log("na rota protect...");
+  // console.log("na rota protect...");
   try {
     const token = req.cookies.token;
 
-    console.log("token:", token);
+    // console.log("token:", token);
 
     if (!token) return res.status(401).json({ error: "Não autorizado." });
 
@@ -42,7 +42,7 @@ const verifyToken = async (req, res, next) => {
   const token = req.cookies.token; // ou header, dependendo do seu login
   console.log("Cookies recebidos:", req.cookies);
 
-  console.log("TOKEN:", token);
+  // console.log("TOKEN:", token);
 
   if (!token) return res.status(401).json({ message: "Não autenticado." });
 
