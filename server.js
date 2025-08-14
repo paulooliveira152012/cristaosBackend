@@ -1,104 +1,89 @@
-// Import required modules
+// server.js
 const express = require('express');
 const mongoose = require('mongoose');
-// const dotenv = require('dotenv');
 const routes = require('./routes');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
-const path = require('path');
-const dotenvFlow = require('dotenv-flow')
-const cookieParser = require("cookie-parser");
+const dotenvFlow = require('dotenv-flow');
+const cookieParser = require('cookie-parser');
 
+dotenvFlow.config();
 
-// Load environment variables from .env file
-// dotenv.config();
-
-dotenvFlow.config()
-
-
-console.log("Ambiente atual:", process.env.NODE_ENV);
-console.log("URL de verificação:", process.env.VERIFICATION_URL);
-
-// 0 - Initialize express app
 const app = express();
-
-// Create an HTTP server that wraps the Express app
+app.set('trust proxy', 1); // cookies SameSite=None; Secure atrás de proxy
 const server = http.createServer(app);
 
-// Define allowed origins
+// ---- ORIGENS PERMITIDAS (hardcoded) ----
 const allowedOrigins = [
   'http://localhost:3000',
   'http://192.168.15.91:3000',
-  'https://cristaos-frontend.vercel.app',         // com hífen
-  'https://www.cristaos-frontend.vercel.app',      // com www, se tiver
+  'https://cristaos-frontend.vercel.app', // produção
 ];
 
-// Initialize Socket.IO (locally)
+// (opcional) liberar qualquer subdomínio vercel.app
+const isVercel = (origin) => {
+  try {
+    const { hostname, protocol } = new URL(origin);
+    return protocol === 'https:' && hostname.endsWith('.vercel.app');
+  } catch {
+    return false;
+  }
+};
+
+// Função única de validação de origem (usada em HTTP e WS)
+const originCheck = (origin, cb) => {
+  if (!origin) return cb(null, true); // healthchecks/curl
+  if (allowedOrigins.includes(origin) || isVercel(origin)) {
+    return cb(null, true);
+  }
+  console.warn('🚫 CORS bloqueado para origin:', origin);
+  return cb(new Error('Not allowed by CORS'));
+};
+// ----------------------------------------
+
+// Socket.IO usando a MESMA política
 const io = socketIo(server, {
   cors: {
-    origin: allowedOrigins,
-    methods: ["GET", "POST", "DELETE", "PUT"],
+    origin: originCheck,
+    methods: ['GET', 'POST', 'DELETE', 'PUT'],
     credentials: true,
-  }
+  },
 });
 
-// 💥 Aqui é onde você injeta o io dentro do app Express
-app.set("io", io);
-
-// .index.js e socketHandlers.js sao necessarios... preciso juntar ambos em um so!
-
-// Import the Socket.IO handling logic from socket/index.js
-require('./socket')(io); // Assuming you handle your socket logic in `socket/index.js`
-// require('./socket/socketHandlers')(io);
-
-
-// 1st
-// Set up CORS configuration for different environments
-// Set up CORS for API
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true,
-}));
-
-
-// 2nd cookieParser 
-app.use(cookieParser()); // <--- ESSENCIAL para ler cookies!
-
-// 3rd JSON parser
-// Middleware to parse JSON and handle CORS
-app.use(express.json());
-
-// 4th Rotas
-// Use the imported routes for the API
-app.use('/api', routes);
-
-// Global error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'An unexpected error occurred.' });
-});
-
-// Connect to MongoDB using Mongoose
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log('MongoDB connected successfully');
-  })
-  .catch((err) => {
-    console.error('MongoDB connection error:', err);
-  });
-
-  app.use((req, res, next) => {
-  console.log(`🔥 ${req.method} ${req.url}`);
+// (debug) log do handshake WS
+io.use((socket, next) => {
+  const h = socket.handshake.headers || {};
+  console.log('🔌 WS handshake:', { origin: h.origin || h.referer || '-' });
   next();
 });
 
+// disponibiliza io no app (p/ controllers emitirem)
+app.set('io', io);
 
+// registra handlers de socket
+require('./socket')(io);
 
-// Set the port for the server (use environment variable if available, otherwise default to 5001)
+// CORS do Express usando a MESMA política
+app.use(cors({ origin: originCheck, credentials: true }));
+app.use(cookieParser());
+app.use(express.json());
+
+// rotas
+app.use('/api', routes);
+
+// erros globais
+app.use((err, req, res, next) => {
+  console.error('❌ Global error:', err);
+  res.status(500).json({ message: 'An unexpected error occurred.' });
+});
+
+// mongo
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('MongoDB connected successfully'))
+  .catch(err => console.error('MongoDB connection error:', err));
+
 const PORT = process.env.PORT || 5001;
-
-// Start the server and listen on the specified port
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server is running on port ${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`HTTP+WS on :${PORT}`);
 });
