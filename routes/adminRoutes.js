@@ -24,6 +24,10 @@ router.delete("/admDeleteListing/:listingId", async (req, res) => {
   }
 });
 
+router.get("adm", () => {
+  console.log("test")
+})
+
 // Rota para adicionar um novo Add (acesso de líder)
 router.post("/admListAdd", verifyToken, verifyLeader, async (req, res) => {
   console.log("List Add Route REACHED")
@@ -76,7 +80,7 @@ router.put("/admEditAd/:addId", verifyToken, verifyLeader, async (req, res) => {
 
 // Rota para listar todas as postagens (acesso de líder)
 router.get("/admFetchAds", async (req, res) => {
-  // console.log(" 🟢 🟢 🟢 GET ADM ROUTE REACHED")
+  console.log(" 🟢 🟢 🟢 GET ADM ROUTE REACHED")
   try {
     const adds = await Add.find().populate("createdBy", "username");
     // console.log("Fetched adds:", adds);

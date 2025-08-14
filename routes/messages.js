@@ -8,23 +8,12 @@ const Notification = require("../models/Notification");
 // const createNotification = require("../utils/notificationUtils");
 const createNotificationUtil = require("../utils/notificationUtils");
 const { protect } = require("../utils/auth");
-
-function emitParticipantChanged(req, conversationId) {
-  const io = req.app.get("io");
-  if (io)
-    io.to(conversationId.toString()).emit("dm:participantChanged", {
-      conversationId,
-    });
-}
-
-function emitAccepted(req, conversationId, byUserId) {
-  const io = req.app.get("io");
-  if (io)
-    io.to(conversationId.toString()).emit("dm:accepted", {
-      conversationId,
-      by: byUserId,
-    });
-}
+const {
+  emitParticipantChanged,
+  emitInvited,
+  emitAccepted,
+  emitRejected,
+} = require("../utils/emitters");
 
 // get dm chats from user
 // GET /api/dm/userConversations/:userId
@@ -32,34 +21,36 @@ router.get("/userConversations/:userId", async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const user = await User.findById(userId); // precisamos do usuário para pegar os timestamps
+    // const user = await User.findById(userId); // precisamos do usuário para pegar os timestamps
 
-    if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
+    // if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
 
     const conversations = await Conversation.find({
-      participants: userId,
+      $or: [{ participants: userId }, { waitingUser: userId }],
     }).populate("participants", "username profileImage");
 
-    const enhancedConversations = await Promise.all(
-      conversations.map(async (chat) => {
-        const lastRead = user.lastReadTimestamps?.[chat._id] || new Date(0);
+    res.status(200).json(conversations);
 
-        const unreadCount = await Message.countDocuments({
-          conversationId: chat._id,
-          timestamp: { $gt: lastRead },
-          sender: { $ne: userId }, // ✅ Corrigido aqui
-          receiver: userId, // ✅ Só mensagens destinadas a ele
-          read: false, // ✅ Só não lidas
-        });
+    // const enhancedConversations = await Promise.all(
+    //   conversations.map(async (chat) => {
+    //     const lastRead = user.lastReadTimestamps?.[chat._id] || new Date(0);
 
-        return {
-          ...chat.toObject(),
-          unreadCount,
-        };
-      })
-    );
+    //     const unreadCount = await Message.countDocuments({
+    //       conversationId: chat._id,
+    //       timestamp: { $gt: lastRead },
+    //       sender: { $ne: userId }, // ✅ Corrigido aqui
+    //       receiver: userId, // ✅ Só mensagens destinadas a ele
+    //       read: false, // ✅ Só não lidas
+    //     });
 
-    res.status(200).json(enhancedConversations);
+    //     return {
+    //       ...chat.toObject(),
+    //       unreadCount,
+    //     };
+    //   })
+    // );
+
+    // res.status(200).json(enhancedConversations);
   } catch (err) {
     console.error("Erro ao buscar conversas:", err);
     res.status(500).json({ error: "Erro ao buscar conversas" });
@@ -68,85 +59,311 @@ router.get("/userConversations/:userId", async (req, res) => {
 
 // 1. Send chat request
 // 1. Send chat request
-router.post("/sendChatRequest", async (req, res) => {
+router.post("/sendChatRequest", protect, async (req, res) => {
   console.log("send chat request route...");
+  try {
   const { requester, requested } = req.body;
   if (!requester || !requested)
     return res.status(400).json({ error: "Missing requester or requested ID" });
+  if (String(req.user._id) !== String(requester))
+    return res.status(403).json({ error: "Requester inválido" });
+  if (String(requester) === String(requested))
+    return res.status(400).json({ error: "Requester == requested" });
 
-  try {
-    await User.findByIdAndUpdate(requester, {
-      $addToSet: { chatRequestsSent: requested },
+  let conv = await Conversation.findOne({
+    $or: [
+      { participants: { $all: [requester, requested], $size: 2 } },
+      { participants: requester, waitingUser: requested },
+      { participants: requested, waitingUser: requester }, // inverso (caso raro)
+    ],
+  });
+
+  if (!conv) {
+    conv = await Conversation.create({
+      participants: [requester],
+      waitingUser: requested,
+      requester,
+      leavingUser: null,
     });
-    await User.findByIdAndUpdate(requested, {
-      $addToSet: { chatRequestsReceived: requester },
-    });
+  } else {
+    // atualiza para o estado de pendência “requester → requested”
+    const set = new Set(conv.participants.map(String));
+    set.add(String(requester));
+    conv.participants = Array.from(set);
 
-    const requesterObject = await User.findById(requester);
-    console.log("requester:", requesterObject.username);
+    conv.waitingUser = requested;
+    conv.requester = requester;
+    conv.leavingUser = null;
+    await conv.save();
+  }
 
-    const requesterUsername = requesterObject.username;
-    console.log("requesterUsername:", requesterUsername);
-
+     // notificação & eventos
     const io = req.app.get("io");
-
-    // 🔔 Cria notificação para o usuário solicitado
     await createNotificationUtil({
       io,
       recipient: requested,
       fromUser: requester,
-      type: "chat_request", // ou "chat_request" se quiser criar uma nova categoria
-      content: `${requesterObject.username} te convidou para uma conversa privada.`,
+      type: "chat_request",
+      content: `${req.user.username || "Alguém"} te convidou para uma conversa privada.`,
+      conversationId: conv._id,
     });
 
-    res
-      .status(200)
-      .json({ message: "Chat request sent and notification created" });
-  } catch (error) {
+    emitInvited(io, requested, conv);
+    emitParticipantChanged(req, conv);
+
+    res.status(200).json({ message: "Convite enviado", conversationId: conv._id });
+  }
+
+  // try {
+  //   await User.findByIdAndUpdate(requester, {
+  //     $addToSet: { chatRequestsSent: requested },
+  //   });
+  //   await User.findByIdAndUpdate(requested, {
+  //     $addToSet: { chatRequestsReceived: requester },
+  //   });
+
+  //   const io = req.app.get("io");
+
+  //   const requesterObject = await User.findById(requester);
+  //   console.log("requester:", requesterObject.username);
+
+  //   const requesterUsername = requesterObject.username;
+  //   console.log("requesterUsername:", requesterUsername);
+
+  //   // 🔔 Cria notificação para o usuário solicitado
+  //   await createNotificationUtil({
+  //     io,
+  //     recipient: requested,
+  //     fromUser: requester,
+  //     type: "chat_request", // ou "chat_request" se quiser criar uma nova categoria
+  //     content: `${requesterObject.username} te convidou para uma conversa privada.`,
+  //   });
+
+  //   // 🔽 prepara (ou reaproveita) a conversa e marca pendência
+  //   let conversation =
+  //     (await Conversation.findOne({
+  //       participants: { $all: [requester, requested], $size: 2 },
+  //     })) ||
+  //     (await Conversation.findOne({
+  //       participants: requester, // conversa “aberta” do requester
+  //       pendingFor: requested, // aguardando o requested aceitar
+  //     }));
+
+  //   if (!conversation) {
+  //     // cria conversa já visível pros dois, mas com 'requested' pendente
+  //     conversation = await Conversation.create({
+  //       participants: [requester, requested],
+  //       pendingFor: [requested],
+  //       leavingUser: null,
+  //     });
+  //   } else {
+  //     // garante estado de pendência
+  //     const pend = new Set((conversation.pendingFor || []).map(String));
+  //     pend.add(String(requested));
+  //     conversation.pendingFor = Array.from(pend);
+  //     conversation.leavingUser = null;
+  //     await conversation.save();
+  //   }
+
+  //   // 🔔 emite evento de convite (para o usuário convidado)
+  //   emitInvited(io, requested, conversation);
+
+  //   // opcional: também avisar quem já está na conversa que houve alteração
+  //   emitParticipantChanged(req, conversation); // << passe o DOC aqui
+
+  //   res
+  //     .status(200)
+  //     .json({ message: "Chat request sent and notification created" });
+  // } 
+  catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+
+// Aceitar convite
+router.post("/accept", protect, async (req, res) => {
+  console.log("aceitando conversa...")
+  try {
+    const { conversationId } = req.body;
+    const me = String(req.user._id);
+
+    const conv = await Conversation.findById(conversationId);
+    if (!conv) return res.status(404).json({ error: "Conversa não encontrada" });
+
+    if (String(conv.waitingUser) !== me) {
+      return res.status(403).json({ error: "Você não tem convite pendente nesta conversa" });
+    }
+
+    // move waitingUser -> participants
+    const set = new Set(conv.participants.map(String));
+    set.add(me);
+    conv.participants = Array.from(set);
+
+    conv.waitingUser = null;
+    conv.leavingUser = null;
+    await conv.save();
+
+    emitAccepted(req, conv._id, me);
+    emitParticipantChanged(req, conv);
+
+    res.status(200).json({ message: "Convite aceito", conversation: conv });
+  } catch (err) {
+    console.error("accept error:", err);
+    res.status(500).json({ error: "Erro interno" });
+  }
+});
+
+
+// Rejeitar convite
+router.post("/reject", protect, async (req, res) => {
+  try {
+    const { conversationId } = req.body;
+    const me = String(req.user._id);
+
+    const conv = await Conversation.findById(conversationId);
+    if (!conv) return res.status(404).json({ error: "Conversa não encontrada" });
+
+    if (String(conv.waitingUser) !== me) {
+      return res.status(403).json({ error: "Nada a rejeitar" });
+    }
+
+    // some da lista do rejeitante (não é participante)
+    conv.waitingUser = null;
+    conv.leavingUser = me; // opcional (rastreamento)
+    // mantém somente quem convidou como participant
+    conv.participants = conv.participants.filter((id) => String(id) !== me);
+
+    // se ninguém sobrar, apaga conversa
+    if (conv.participants.length === 0) {
+      await Conversation.findByIdAndDelete(conv._id);
+    } else {
+      await conv.save();
+    }
+
+    const io = req.app.get("io");
+    emitRejected(io, conv._id, me);
+    if (conv.participants.length > 0) emitParticipantChanged(req, conv);
+
+    res.status(200).json({ message: "Convite rejeitado" });
+  } catch (err) {
+    console.error("reject error:", err);
+    res.status(500).json({ error: "Erro interno" });
+  }
+});
+
+// Reinvitar quem saiu
+router.post("/reinvite", protect, async (req, res) => {
+  try {
+    const { conversationId } = req.body;
+    const me = String(req.user._id);
+
+    const conv = await Conversation.findById(conversationId);
+    if (!conv) return res.status(404).json({ error: "Conversa não encontrada" });
+
+    const iParticipate = conv.participants.map(String).includes(me);
+    if (!iParticipate) return res.status(403).json({ error: "Você não participa desta conversa" });
+
+    if (!conv.leavingUser) return res.status(400).json({ error: "Não há ninguém para reinvitar" });
+
+    // seta pendência para quem saiu
+    conv.waitingUser = conv.leavingUser;
+    conv.requester = req.user._id;
+    conv.leavingUser = null;
+    await conv.save();
+
+    const io = req.app.get("io");
+    await createNotificationUtil({
+      io,
+      recipient: conv.waitingUser,
+      fromUser: me,
+      type: "chat_reinvite",
+      content: `${req.user.username || "Alguém"} te chamou de volta para a conversa.`,
+      conversationId: conv._id,
+    });
+
+    emitInvited(io, conv.waitingUser, conv);
+    emitParticipantChanged(req, conv);
+
+    res.status(200).json({ message: "Reconvite enviado" });
+  } catch (err) {
+    console.error("reinvite error:", err);
+    res.status(500).json({ error: "Erro interno" });
+  }
+});
+
 
 // 2. Reject chat request
-router.post("/rejectChatRequest", async (req, res) => {
-  const { requester, requested } = req.body;
-  if (!requester || !requested)
-    return res.status(400).json({ error: "Missing requester or requested ID" });
+// router.post("/rejectChatRequest", async (req, res) => {
+//   const { requester, requested } = req.body;
+//   if (!requester || !requested)
+//     return res.status(400).json({ error: "Missing requester or requested ID" });
 
-  try {
-    // remover pedido da lista de chatRequestsSent do usuario que enviou o convite
-    await User.findByIdAndUpdate(requester, {
-      $pull: { chatRequestsSent: requested },
-    });
-    // remover pedido da lista de chatRequestsSent do usuario que recebeu o convite
-    await User.findByIdAndUpdate(requested, {
-      $pull: { chatRequestsReceived: requester },
-    });
-    res.status(200).json({ message: "Chat request rejected" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+//   try {
+//     // remover pedido da lista de chatRequestsSent do usuario que enviou o convite
+//     await User.findByIdAndUpdate(requester, {
+//       $pull: { chatRequestsSent: requested },
+//     });
+//     // remover pedido da lista de chatRequestsSent do usuario que recebeu o convite
+//     await User.findByIdAndUpdate(requested, {
+//       $pull: { chatRequestsReceived: requester },
+//     });
 
+//     // tenta localizar a conversa envolvida
+//     let conversation =
+//       (await Conversation.findOne({
+//         participants: { $all: [requester, requested], $size: 2 },
+//       })) ||
+//       (await Conversation.findOne({
+//         participants: requester,
+//         pendingFor: requested,
+//       }));
+
+//     if (conversation) {
+//       // remove a pendência do requested
+//       conversation.pendingFor = (conversation.pendingFor || [])
+//         .map(String)
+//         .filter((id) => id !== String(requested));
+
+//       // regra de negócio:
+//       // se você quer que a conversa suma pro requested, garanta que ele não permaneça em 'participants'
+//       conversation.participants = conversation.participants
+//         .map(String)
+//         .filter((id) => id !== String(requested));
+
+//       // opcional: marca quem “saiu”
+//       conversation.leavingUser = requested;
+
+//       // se ninguém ficou, pode deletar a conversa
+//       if (conversation.participants.length === 0) {
+//         await Conversation.findByIdAndDelete(conversation._id);
+//       } else {
+//         await conversation.save();
+//       }
+
+//       // eventos em tempo real
+//       const io = req.app.get("io");
+//       emitRejected(io, conversation._id, requested); // <- dm:rejected
+//       emitParticipantChanged(req, conversation._id, {
+//         participants: (conversation.participants || []).map(String),
+//         pendingFor: (conversation.pendingFor || []).map(String),
+//         leavingUser: String(requested),
+//       });
+//     }
+
+//     res.status(200).json({ message: "Chat request rejected" });
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ error: "Internal server error" });
+//   }
+// });
+
+// 3. Accept chat request and start conversation
 // 3. Accept chat request and start conversation
 // 3. Accept chat request and start conversation
 router.post("/startNewConversation", protect, async (req, res) => {
-  console.log("rota startNewConversation...");
   const { requester, requested, notificationId, conversationId } = req.body;
-
-  console.log(
-    "requester:",
-    requester,
-    "requested:",
-    requested,
-    "notificationId:",
-    notificationId,
-    "conversationId:",
-    conversationId
-  );
-
   if (!requester || !requested)
     return res.status(400).json({ error: "Missing requester or requested ID" });
 
@@ -156,82 +373,77 @@ router.post("/startNewConversation", protect, async (req, res) => {
       return res.status(403).json({ error: "Chat request not accepted yet" });
     }
 
-    // Se veio conversationId, é reinvite
+    // (A) Reentrada em conversa existente via conversationId
     if (conversationId) {
-      console.log("conversationId present:", conversationId);
       const conversation = await Conversation.findById(conversationId);
-      if (conversation) {
-        console.log("conversation found!");
-        if (!conversation.participants.includes(requested)) {
-          conversation.participants.push(requested);
-        }
+      if (!conversation)
+        return res.status(404).json({ error: "Conversation not found" });
 
-        console.log("setting leavingUser back to null");
-        conversation.leavingUser = null;
-
-        if (
-          !conversation.participants.map(String).includes(String(requested))
-        ) {
-          conversation.participants.push(requested);
-        }
-        // quem aceitou está voltando; zera leavingUser
-        conversation.leavingUser = null;
-
-        await conversation.save();
-
-        await User.findByIdAndUpdate(requester, {
-          $pull: { chatRequestsSent: requested },
-        });
-        await User.findByIdAndUpdate(requested, {
-          $pull: { chatRequestsReceived: requester },
-        });
-        if (notificationId) {
-          await Notification.findByIdAndDelete(notificationId);
-        }
-
-        // 🔔 Eventos de tempo real
-        emitAccepted(req, conversationId, req.user._id);
-        emitParticipantChanged(req, conversationId);
-
-        // gerar a mensagem de reentrada:
-        // const systemMsg = await Message.create({
-        //   conversationId,
-        //   userId: req.user._id, // usuário reentrante
-        //   username: req.user.username,
-        //   profileImage: req.user.profileImage || "",
-        //   message: `${req.user.username} voltou para a conversa 1.`,
-        //   timestamp: new Date(),
-        //   system: true,
-        // });
-
-        // 🔔 Emitir para os usuários conectados ao socket da conversa
-        // io.to(conversationId).emit("newPrivateMessage", {
-        //   ...systemMsg.toObject(),
-        // });
-
-        return res.status(200).json({
-          message: "Usuário reinserido na conversa existente",
-          conversation,
-        });
+      const rStr = String(requested);
+      // garante participação
+      if (!conversation.participants.map(String).includes(rStr)) {
+        conversation.participants.push(requested);
       }
+
+      // 🔑 LIMPA pendência deste usuário e zera leavingUser
+      conversation.pendingFor = (conversation.pendingFor || [])
+        .map(String)
+        .filter((id) => id !== rStr);
+      conversation.leavingUser = null;
+
+      await conversation.save();
+
+      // limpa pedidos/notification
+      await User.findByIdAndUpdate(requester, {
+        $pull: { chatRequestsSent: requested },
+      });
+      await User.findByIdAndUpdate(requested, {
+        $pull: { chatRequestsReceived: requester },
+      });
+      if (notificationId) await Notification.findByIdAndDelete(notificationId);
+
+      emitAccepted(req, conversation._id, req.user._id);
+      emitParticipantChanged(req, conversation); // DOC → payload completo
+      return res
+        .status(200)
+        .json({ message: "Usuário reinserido", conversation });
     }
 
-    // Se não veio conversationId ou não encontrou, cria nova
-    const existingConversation = await Conversation.findOne({
+    // (B) Já existe conversa “cheia” entre os dois
+    let existingConversation = await Conversation.findOne({
       participants: { $all: [requester, requested], $size: 2 },
     });
 
     if (existingConversation) {
-      // Já existia — garanta UI atualizada
-      emitParticipantChanged(req, existingConversation._id);
+      const rStr = String(requested);
+      // 🔑 LIMPA pendência e zera leavingUser
+      existingConversation.pendingFor = (existingConversation.pendingFor || [])
+        .map(String)
+        .filter((id) => id !== rStr);
+      existingConversation.leavingUser = null;
+      await existingConversation.save();
+
+      // limpa pedidos/notification
+      await User.findByIdAndUpdate(requester, {
+        $pull: { chatRequestsSent: requested },
+      });
+      await User.findByIdAndUpdate(requested, {
+        $pull: { chatRequestsReceived: requester },
+      });
+      if (notificationId) await Notification.findByIdAndDelete(notificationId);
+
+      emitParticipantChanged(req, existingConversation); // DOC
       return res.status(200).json({
-        message: "Conversation already exists",
+        message: "Conversation already exists (accepted)",
         conversation: existingConversation,
       });
     }
 
+    // (C) Não existe: cria nova (sem pendências, já que está aceitando agora)
     const newConversation = await Conversation.create({
       participants: [requester, requested],
+      pendingFor: [], // 🔑 vazio
+      leavingUser: null,
     });
 
     await User.findByIdAndUpdate(requester, {
@@ -240,14 +452,10 @@ router.post("/startNewConversation", protect, async (req, res) => {
     await User.findByIdAndUpdate(requested, {
       $pull: { chatRequestsReceived: requester },
     });
-    if (notificationId) {
-      await Notification.findByIdAndDelete(notificationId);
-    }
+    if (notificationId) await Notification.findByIdAndDelete(notificationId);
 
-    // 🔔 Nova conversa criada
-    emitParticipantChanged(req, newConversation._id);
-
-    res
+    emitParticipantChanged(req, newConversation); // DOC
+    return res
       .status(201)
       .json({ message: "Conversation started", conversation: newConversation });
   } catch (error) {
@@ -484,46 +692,46 @@ router.get("/totalUnread/:userId", async (req, res) => {
   }
 });
 
-// ROTA: sair de um chat privado (e deletar se ninguém mais estiver)
+
+// Sair da conversa
+// routes/chatRoutes.js
 router.delete("/leaveChat/:conversationId", protect, async (req, res) => {
-  console.log("rota deletar DM alcançada...");
-  const { conversationId } = req.params;
-  const { userId } = req.body;
-
   try {
-    const conversation = await Conversation.findById(conversationId);
+    const { conversationId } = req.params;
+    const me = String(req.user._id);
 
-    if (!conversation) {
-      return res.status(404).json({ error: "Conversa não encontrada" });
+    const conv = await Conversation.findById(conversationId);
+    if (!conv) return res.status(404).json({ error: "Conversa não encontrada" });
+
+    const isParticipant = conv.participants.map(String).includes(me);
+    if (!isParticipant) {
+      return res.status(403).json({ error: "Você não participa desta conversa." });
     }
 
-    conversation.leavingUser = userId;
+    // remove quem saiu
+    conv.participants = conv.participants.filter((id) => String(id) !== me);
+    conv.leavingUser = req.user._id;
 
-    // Remove o usuário da conversa
-    conversation.participants = conversation.participants.filter(
-      (id) => id.toString() !== userId
-    );
+    // ⚠️ Se não sobra ninguém em participants → apaga
+    if (conv.participants.length === 0) {
+      // (opcional) apaga notificações pendentes relacionadas a esse conv
+      await Notification.deleteMany({ conversationId });
 
-    if (conversation.participants.length === 0) {
-      // Ninguém mais na conversa? Deleta!
       await Conversation.findByIdAndDelete(conversationId);
 
-        // opcional: avisar quem ainda está conectado à sala (se houver)
+      // emite payload final (tudo vazio)
       emitParticipantChanged(req, conversationId, {
-        removedUserId: userId,
         participants: [],
-        leavingUser: userId,
+        waitingUser: null,
+        leavingUser: me,
       });
-      return res.json({
-        message: "Conversa excluída (sem participantes restantes).",
-      });
+      return res.json({ message: "Conversa excluída (sem participantes restantes)." });
     }
 
-    await conversation.save();
+    await conv.save();
 
-    // definir username
+    // (opcional) mensagem de sistema
     const username = req.user.username || req.user.name || "Alguém";
-    // Mensagem de sistema destacada
     const systemMsg = await Message.create({
       conversationId,
       userId: req.user._id,
@@ -534,30 +742,110 @@ router.delete("/leaveChat/:conversationId", protect, async (req, res) => {
       system: true,
     });
 
-    // Busca com todos os campos completos (inclusive _id e system)
-    const fullSystemMsg = await Message.findById(systemMsg._id);
-
-    
-    // 🔊 emita para a SALA DA CONVERSA (não por id do usuário)
     const io = req.app.get("io");
-    if (io) {
-      io.to(conversationId).emit("newPrivateMessage", fullSystemMsg);
-    }
+    if (io) io.to(String(conversationId)).emit("newPrivateMessage", systemMsg);
 
-       // 🔔 payload completo — front pode reagir de imediato (sem esperar fetch)
-    emitParticipantChanged(req, conversationId, {
-      removedUserId: userId,
-      participants: conversation.participants.map((id) => id.toString()),
-      leavingUser: userId,
-    });
-
-    // return res.json({ message: "Você saiu da conversa." });
-    
-    
-    return res.json({ message: "Você saiu da conversa." });
+    // atualiza UIs com estado completo
+    emitParticipantChanged(req, conv);
+    res.json({ message: "Você saiu da conversa." });
   } catch (err) {
-    console.error("Erro ao sair da conversa:", err);
+    console.error("leaveChat error:", err);
     res.status(500).json({ error: "Erro interno ao sair da conversa." });
+  }
+});
+
+
+// ROTA: sair de um chat privado (e deletar se ninguém mais estiver)
+// ROTA: sair de um chat privado (e deletar se ninguém mais estiver)
+// router.delete("/leaveChat/:conversationId", protect, async (req, res) => {
+//   console.log("🧵 [DM] leaveChat…");
+//   const { conversationId } = req.params;
+
+//   try {
+//     // use SEMPRE o id autenticado (evita spoof no body)
+//     const me = String(req.user._id);
+
+//     const conversation = await Conversation.findById(conversationId);
+//     if (!conversation) {
+//       return res.status(404).json({ error: "Conversa não encontrada" });
+//     }
+
+//     // bloqueia saída de quem nem participa
+//     const isParticipant = conversation.participants
+//       .map((id) => String(id))
+//       .includes(me);
+//     if (!isParticipant) {
+//       return res
+//         .status(403)
+//         .json({ error: "Você não participa desta conversa." });
+//     }
+
+//     // marca quem saiu e remove dos participantes
+//     conversation.leavingUser = req.user._id;
+//     conversation.participants = conversation.participants.filter(
+//       (id) => String(id) !== me
+//     );
+
+//     // se ninguém ficou, apaga a conversa
+//     if (conversation.participants.length === 0) {
+//       await Conversation.findByIdAndDelete(conversationId);
+
+//       // emite evento com payload completo (sem participantes)
+//       emitParticipantChanged(req, conversationId, {
+//         removedUserId: me,
+//         participants: [],
+//         leavingUser: me,
+//       });
+
+//       return res.json({
+//         message: "Conversa excluída (sem participantes restantes).",
+//       });
+//     }
+
+//     // ainda restou alguém → persiste mudança
+//     await conversation.save();
+
+//     // cria mensagem de sistema “fulano saiu…”
+//     const username = req.user.username || req.user.name || "Alguém";
+//     const systemMsg = await Message.create({
+//       conversationId,
+//       userId: req.user._id,
+//       username,
+//       profileImage: req.user.profileImage || "",
+//       message: `${username} saiu da conversa.`,
+//       timestamp: new Date(),
+//       system: true,
+//     });
+//     const fullSystemMsg = await Message.findById(systemMsg._id);
+
+//     // envia a system message para quem está na SALA da conversa
+//     const io = req.app.get("io");
+//     if (io)
+//       io.to(String(conversationId)).emit("newPrivateMessage", fullSystemMsg);
+
+//     // emite mudança de participantes (lista já atualizada)
+//     emitParticipantChanged(req, conversationId, {
+//       removedUserId: me,
+//       participants: conversation.participants.map((id) => String(id)),
+//       leavingUser: me,
+//     });
+
+//     return res.json({ message: "Você saiu da conversa." });
+//   } catch (err) {
+//     console.error("❌ Erro ao sair da conversa:", err);
+//     res.status(500).json({ error: "Erro interno ao sair da conversa." });
+//   }
+// });
+
+// GET: detalhe da conversa
+router.get("/conversation/:conversationId", protect, async (req, res) => {
+  try {
+    const conv = await Conversation.findById(req.params.conversationId);
+    if (!conv) return res.status(404).json({ error: "Conversa não encontrada" });
+    res.json(conv);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Erro interno" });
   }
 });
 

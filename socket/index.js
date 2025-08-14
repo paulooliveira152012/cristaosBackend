@@ -546,10 +546,7 @@ module.exports = function (io) {
 // permitir acesso ao io em controllers
 module.exports.getIO = () => ioRef;
 
-// helpers opcionais (em vez de duplicar em todo controller)
-module.exports.emitParticipantChanged = (conversationId) => {
-  if (ioRef) ioRef.to(conversationId).emit("dm:participantChanged", { conversationId });
-};
+
 module.exports.emitAccepted = (conversationId, by) => {
   if (ioRef) ioRef.to(conversationId).emit("dm:accepted", { conversationId, by });
 };
