@@ -51,7 +51,7 @@ module.exports = function (io) {
 
   // 1 - Quando um novo usuário se conecta, criamos um socket exclusivo para ele
   io.on("connection", (socket) => {
-    console.log(`New client connected: ${socket.id}`);
+    // console.log(`New client connected: ${socket.id}`);
 
     // ... se houver algum erro...
     const emitError = (message) => {

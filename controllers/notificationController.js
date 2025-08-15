@@ -3,7 +3,7 @@ const createNotificationUtil = require("../utils/notificationUtils");
 
 // Buscar todas as notificações de um usuário
 exports.getNotifications = async (req, res) => {
-  console.log("fetching notifications...");
+  // console.log("fetching notifications...");
   try {
     const userId = req.user._id;
 

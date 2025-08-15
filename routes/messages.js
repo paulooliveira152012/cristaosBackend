@@ -59,127 +59,127 @@ router.get("/userConversations/:userId", async (req, res) => {
 
 // 1. Send chat request
 // 1. Send chat request
+// routes/dm.js (trecho)
 router.post("/sendChatRequest", protect, async (req, res) => {
-  console.log("send chat request route...");
   try {
-  const { requester, requested } = req.body;
-  if (!requester || !requested)
-    return res.status(400).json({ error: "Missing requester or requested ID" });
-  if (String(req.user._id) !== String(requester))
-    return res.status(403).json({ error: "Requester inválido" });
-  if (String(requester) === String(requested))
-    return res.status(400).json({ error: "Requester == requested" });
+    const { requester, requested } = req.body;
 
-  let conv = await Conversation.findOne({
-    $or: [
-      { participants: { $all: [requester, requested], $size: 2 } },
-      { participants: requester, waitingUser: requested },
-      { participants: requested, waitingUser: requester }, // inverso (caso raro)
-    ],
-  });
+    if (!requester || !requested)
+      return res.status(400).json({ error: "Missing requester or requested ID" });
 
-  if (!conv) {
-    conv = await Conversation.create({
-      participants: [requester],
-      waitingUser: requested,
+    if (String(req.user._id) !== String(requester))
+      return res.status(403).json({ error: "Requester inválido" });
+
+    if (String(requester) === String(requested))
+      return res.status(400).json({ error: "Requester == requested" });
+
+    const pairKey = Conversation.makePairKey(requester, requested);
+
+    // 1) Se já existe conversa ATIVA → retorna, não cria nada
+    const active = await Conversation.findOne({ pairKey, status: "active" });
+    if (active) {
+      return res.status(200).json({
+        message: "Já existe conversa ativa",
+        conversationId: active._id,
+        status: "active",
+      });
+    }
+
+    // 2) Se já existe convite PENDENTE para o mesmo "requested" → não duplica
+    const pending = await Conversation.findOne({ pairKey, status: "pending" });
+    if (pending) {
+      // Se o pending atual já está aguardando o mesmo 'requested', não reenviar
+      if (String(pending.waitingUser) === String(requested)) {
+        return res.status(200).json({
+          message: "Convite já pendente",
+          conversationId: pending._id,
+          status: "pending",
+        });
+      }
+      // Se está pendente mas aguardando o outro lado (caso invertido), trocamos a direção
+      pending.requester = requester;
+      pending.waitingUser = requested;
+      pending.requestedAt = new Date();
+      pending.leavingUser = null;
+      await pending.save();
+
+      // Notifica só nessa troca de direção
+      const io = req.app.get("io");
+      await createNotificationUtil({
+        io,
+        recipient: requested,
+        fromUser: requester,
+        type: "chat_request",
+        content: `${req.user.username || "Alguém"} te convidou para uma conversa privada 1.`,
+        conversationId: pending._id,
+      });
+
+      emitInvited(io, requested, pending);
+      emitParticipantChanged(req, pending);
+      return res.status(200).json({ message: "Convite atualizado", conversationId: pending._id, status: "pending" });
+    }
+
+    // 3) Se existe DECLINED ou LEFT → podemos reativar como pendente (reconvite)
+    const old = await Conversation.findOne({ pairKey, status: { $in: ["declined", "left"] } });
+    if (old) {
+      old.status = "pending";
+      old.requester = requester;
+      old.waitingUser = requested;
+      old.requestedAt = new Date();
+      old.respondedAt = null;
+      old.leavingUser = null;
+      // garante que o requester esteja presente no array
+      const set = new Set((old.participants || []).map(String));
+      set.add(String(requester));
+      old.participants = Array.from(set);
+      await old.save();
+
+      const io = req.app.get("io");
+      await createNotificationUtil({
+        io,
+        recipient: requested,
+        fromUser: requester,
+        type: "chat_request",
+        content: `${req.user.username || "Alguém"} te convidou para uma conversa privada 2.`,
+        conversationId: old._id,
+      });
+      emitInvited(io, requested, old);
+      emitParticipantChanged(req, old);
+      return res.status(200).json({ message: "Reconvite enviado", conversationId: old._id, status: "pending" });
+    }
+
+    // 4) Não existe nada → cria PENDENTE
+    const conv = await Conversation.create({
+      pairKey,
+      participants: [requester], // só quem convidou aparece já
       requester,
+      waitingUser: requested,
+      status: "pending",
+      requestedAt: new Date(),
       leavingUser: null,
     });
-  } else {
-    // atualiza para o estado de pendência “requester → requested”
-    const set = new Set(conv.participants.map(String));
-    set.add(String(requester));
-    conv.participants = Array.from(set);
 
-    conv.waitingUser = requested;
-    conv.requester = requester;
-    conv.leavingUser = null;
-    await conv.save();
-  }
-
-     // notificação & eventos
     const io = req.app.get("io");
     await createNotificationUtil({
       io,
       recipient: requested,
       fromUser: requester,
       type: "chat_request",
-      content: `${req.user.username || "Alguém"} te convidou para uma conversa privada.`,
+      content: `${req.user.username || "Alguém"} te convidou para uma conversa privada 3.`,
       conversationId: conv._id,
     });
 
     emitInvited(io, requested, conv);
     emitParticipantChanged(req, conv);
 
-    res.status(200).json({ message: "Convite enviado", conversationId: conv._id });
-  }
+    return res.status(200).json({ message: "Convite enviado", conversationId: conv._id, status: "pending" });
 
-  // try {
-  //   await User.findByIdAndUpdate(requester, {
-  //     $addToSet: { chatRequestsSent: requested },
-  //   });
-  //   await User.findByIdAndUpdate(requested, {
-  //     $addToSet: { chatRequestsReceived: requester },
-  //   });
-
-  //   const io = req.app.get("io");
-
-  //   const requesterObject = await User.findById(requester);
-  //   console.log("requester:", requesterObject.username);
-
-  //   const requesterUsername = requesterObject.username;
-  //   console.log("requesterUsername:", requesterUsername);
-
-  //   // 🔔 Cria notificação para o usuário solicitado
-  //   await createNotificationUtil({
-  //     io,
-  //     recipient: requested,
-  //     fromUser: requester,
-  //     type: "chat_request", // ou "chat_request" se quiser criar uma nova categoria
-  //     content: `${requesterObject.username} te convidou para uma conversa privada.`,
-  //   });
-
-  //   // 🔽 prepara (ou reaproveita) a conversa e marca pendência
-  //   let conversation =
-  //     (await Conversation.findOne({
-  //       participants: { $all: [requester, requested], $size: 2 },
-  //     })) ||
-  //     (await Conversation.findOne({
-  //       participants: requester, // conversa “aberta” do requester
-  //       pendingFor: requested, // aguardando o requested aceitar
-  //     }));
-
-  //   if (!conversation) {
-  //     // cria conversa já visível pros dois, mas com 'requested' pendente
-  //     conversation = await Conversation.create({
-  //       participants: [requester, requested],
-  //       pendingFor: [requested],
-  //       leavingUser: null,
-  //     });
-  //   } else {
-  //     // garante estado de pendência
-  //     const pend = new Set((conversation.pendingFor || []).map(String));
-  //     pend.add(String(requested));
-  //     conversation.pendingFor = Array.from(pend);
-  //     conversation.leavingUser = null;
-  //     await conversation.save();
-  //   }
-
-  //   // 🔔 emite evento de convite (para o usuário convidado)
-  //   emitInvited(io, requested, conversation);
-
-  //   // opcional: também avisar quem já está na conversa que houve alteração
-  //   emitParticipantChanged(req, conversation); // << passe o DOC aqui
-
-  //   res
-  //     .status(200)
-  //     .json({ message: "Chat request sent and notification created" });
-  // } 
-  catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
+  } catch (error) {
+    console.error("sendChatRequest error:", error?.message || error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 
 // Aceitar convite
@@ -217,41 +217,101 @@ router.post("/accept", protect, async (req, res) => {
 
 
 // Rejeitar convite
-router.post("/reject", protect, async (req, res) => {
+// Rejeitar convite
+router.post("/rejectChatRequest", protect, async (req, res) => {
+  console.log("rejeitando convite de conversa...");
   try {
-    const { conversationId } = req.body;
     const me = String(req.user._id);
+    const {
+      conversationId: convoIdFromBody,
+      notificationId,
+      requester,     // id de quem convidou
+      requested,     // id de quem recebeu (deveria ser == me)
+    } = req.body;
 
-    const conv = await Conversation.findById(conversationId);
+    let conv = null;
+
+    // 1) usa conversationId se veio
+    if (convoIdFromBody) {
+      conv = await Conversation.findById(convoIdFromBody);
+    }
+
+    // 2) fallback: resolve pela dupla de usuários (pendente/aguardando)
+    if (!conv && requester && requested) {
+      conv = await Conversation.findOne({
+        $and: [
+          { status: { $in: ["pending", "awaiting", "requested"] } },
+          {
+            $or: [
+              { requester: requester, waitingUser: requested },
+              { participants: { $all: [requester, requested] } },
+            ],
+          },
+        ],
+      }).sort({ createdAt: -1 });
+    }
+
     if (!conv) return res.status(404).json({ error: "Conversa não encontrada" });
 
+    // só quem está aguardando pode rejeitar
     if (String(conv.waitingUser) !== me) {
       return res.status(403).json({ error: "Nada a rejeitar" });
     }
 
-    // some da lista do rejeitante (não é participante)
-    conv.waitingUser = null;
-    conv.leavingUser = me; // opcional (rastreamento)
-    // mantém somente quem convidou como participant
-    conv.participants = conv.participants.filter((id) => String(id) !== me);
+    // identifica quem convidou
+    const requesterId =
+      conv.requester
+        ? String(conv.requester)
+        : (conv.participants || []).map(String).find((id) => id !== me) || null;
 
-    // se ninguém sobrar, apaga conversa
-    if (conv.participants.length === 0) {
-      await Conversation.findByIdAndDelete(conv._id);
+    // 3) atualiza estado
+    conv.status = "declined";
+    conv.respondedAt = new Date();
+    conv.waitingUser = null;
+    conv.leavingUser = req.user._id;
+    conv.participants = requesterId ? [requesterId] : [];
+    await conv.save();
+
+    // 4) remove a notificação certa
+    if (notificationId) {
+      await Notification.findOneAndDelete({ _id: notificationId, recipient: me });
     } else {
-      await conv.save();
+      await Notification.deleteMany({
+        recipient: me,
+        type: "chat_request",
+        // conversationId: conv._id, // use isto se suas notificações armazenarem a conversa
+      });
     }
 
+    // 5) notifica o solicitante (opcional)
     const io = req.app.get("io");
-    emitRejected(io, conv._id, me);
-    if (conv.participants.length > 0) emitParticipantChanged(req, conv);
+    // if (requesterId) {
+    //   await createNotificationUtil({
+    //     io,
+    //     recipient: requesterId,
+    //     fromUser: req.user._id,
+    //     type: "chat_declined",
+    //     content: `${req.user.username || "O usuário"} recusou seu convite de conversa privada.`,
+    //     conversationId: conv._id,
+    //   });
+    // }
 
-    res.status(200).json({ message: "Convite rejeitado" });
+    // eventos socket (se existirem helpers)
+    if (typeof emitRejected === "function") {
+      emitRejected(io, { conversationId: conv._id, rejectedBy: me, to: requesterId });
+    }
+    if (typeof emitParticipantChanged === "function") {
+      emitParticipantChanged(req, conv);
+    }
+
+    return res.status(200).json({ message: "Convite rejeitado", status: conv.status });
   } catch (err) {
     console.error("reject error:", err);
-    res.status(500).json({ error: "Erro interno" });
+    return res.status(500).json({ error: "Erro interno" });
   }
 });
+
+
 
 // Reinvitar quem saiu
 router.post("/reinvite", protect, async (req, res) => {
@@ -531,7 +591,7 @@ router.post("/reinvite", protect, async (req, res) => {
       recipient: requested,
       fromUser: requester,
       type: "chat_reinvite",
-      content: `${requesterObject.username} te convidou para uma conversa privada.`,
+      content: `${requesterObject.username} te convidou para uma conversa privada 4.`,
       conversationId,
     });
 

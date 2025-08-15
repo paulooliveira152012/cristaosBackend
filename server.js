@@ -54,7 +54,7 @@ const io = socketIo(server, {
 // (debug) log do handshake WS
 io.use((socket, next) => {
   const h = socket.handshake.headers || {};
-  console.log('🔌 WS handshake:', { origin: h.origin || h.referer || '-' });
+  // console.log('🔌 WS handshake:', { origin: h.origin || h.referer || '-' });
   next();
 });
 

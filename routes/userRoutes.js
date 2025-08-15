@@ -34,7 +34,7 @@ const {
 const { sendVerificationSMS } = require("../utils/sms");
 
 router.get("/getAllUsers", async (req, res) => {
-  console.log("🟢 🟢 🟢  rota de buscar todos os usuarios...");
+  // console.log("🟢 🟢 🟢  rota de buscar todos os usuarios...");
 
   try {
     const users = await User.find({}, "_id username profileImage");
@@ -1005,7 +1005,7 @@ router.get("/:userId/friends", async (req, res) => {
 
 // route for main chat
 router.get("/checkUnreadMainChat", protect, async (req, res) => {
-  console.log(" checking for unread messages route...");
+  // console.log(" checking for unread messages route...");
 
   try {
     const user = await User.findById(req.user._id);
