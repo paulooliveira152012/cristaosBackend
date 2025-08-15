@@ -421,82 +421,65 @@ router.get("/current", protect, async (req, res) => {
 
 // User Login
 // User Login
+// routes/auth.js (ou onde fica seu login)
 router.post("/login", async (req, res) => {
   console.log("Rota de login acessada");
-
   const { identifier, password } = req.body;
-  console.log(`identifier: ${identifier}, password: ${password}`);
 
   try {
     if (!identifier || !password) {
-      return res
-        .status(400)
-        .json({ message: "Todos os campos são necessários" });
+      return res.status(400).json({ message: "Todos os campos são necessários" });
     }
 
-    // Verifica se o identificador é um email ou telefone
     const isEmail = identifier.includes("@");
     const query = isEmail
       ? { email: identifier.toLowerCase() }
       : { phone: Number(identifier) };
 
     const user = await User.findOne(query);
-
-    if (!user) {
-      return res.status(400).json({ message: "Credenciais inválidas" });
-    }
-
+    if (!user) return res.status(400).json({ message: "Credenciais inválidas" });
     if (!user.isVerified) {
-      return res
-        .status(403)
-        .json({ message: "Verifique sua conta antes de fazer login." });
+      return res.status(403).json({ message: "Verifique sua conta antes de fazer login." });
     }
-
     if (!user.password) {
       return res.status(403).json({
         message:
-          "Essa conta foi criada com o login do Google. Por favor, use 'Entrar com Google' ou clique em 'Esqueci minha senha' para definir uma senha.",
+          "Essa conta foi criada com o login do Google. Use 'Entrar com Google' ou 'Esqueci minha senha'.",
       });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Credenciais inválidas" });
-    }
+    if (!isMatch) return res.status(400).json({ message: "Credenciais inválidas" });
 
-    // Criar JWT
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-
+    // JWT
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
     console.log("token JWT gerado:", token);
 
-    // Enviar o token como cookie (modo dev)
-    // res.cookie("token", token, {
-    //   httpOnly: true,
-    //   secure: false,
-    //   sameSite: "Lax",
-    //   maxAge: 1000 * 60 * 60 * 24 * 7, // 7 dias
-    // });
+    // ⚙️ Opções do cookie: dev (HTTP) vs prod (HTTPS)
+    const isProd =
+      process.env.NODE_ENV === "production" ||
+      process.env.FORCE_SECURE_COOKIE === "1"; // opcional: força em sandbox
 
-    // Enviar o token como cookie (modo prod)
     res.cookie("token", token, {
       httpOnly: true,
-      secure: true,
-      sameSite: "None",
+      secure: isProd,                 // ✅ prod: true | dev: false
+      sameSite: isProd ? "None" : "Lax", // ✅ prod: None | dev: Lax
+      // NÃO defina "domain" em dev; em prod só se precisar compartilhar entre subdomínios.
+      path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    // Retornar dados do usuário sem senha
     const userObject = user.toObject();
     delete userObject.password;
 
-    res.status(200).json(userObject);
+    // ✅ Retorne o token também (útil para Authorization: Bearer)
+    res.status(200).json({ user: userObject, token });
   } catch (error) {
     console.error("Erro no login:", error);
     res.status(500).json({ message: error.message });
   }
 });
+
 
 // debug route for cookies set up
 router.get("/debug/cookies", (req, res) => {
