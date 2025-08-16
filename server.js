@@ -18,8 +18,9 @@ const server = http.createServer(app);
 const allowedOrigins = [
   'http://localhost:3000',
   'http://192.168.15.91:3000',
+  process.env.FRONTEND_URL,
   'https://cristaos-frontend.vercel.app', // produção
-];
+].filter(Boolean);
 
 // (opcional) liberar qualquer subdomínio vercel.app
 const isVercel = (origin) => {
@@ -34,9 +35,7 @@ const isVercel = (origin) => {
 // Função única de validação de origem (usada em HTTP e WS)
 const originCheck = (origin, cb) => {
   if (!origin) return cb(null, true); // healthchecks/curl
-  if (allowedOrigins.includes(origin) || isVercel(origin)) {
-    return cb(null, true);
-  }
+  if (allowedOrigins.includes(origin) || isVercel(origin)) return cb(null, true);
   console.warn('🚫 CORS bloqueado para origin:', origin);
   return cb(new Error('Not allowed by CORS'));
 };
@@ -49,13 +48,6 @@ const io = socketIo(server, {
     methods: ['GET', 'POST', 'DELETE', 'PUT'],
     credentials: true,
   },
-});
-
-// (debug) log do handshake WS
-io.use((socket, next) => {
-  const h = socket.handshake.headers || {};
-  // console.log('🔌 WS handshake:', { origin: h.origin || h.referer || '-' });
-  next();
 });
 
 // disponibiliza io no app (p/ controllers emitirem)

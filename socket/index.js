@@ -1,3 +1,6 @@
+
+
+
 const {
   addUser,
   removeUser,
@@ -25,6 +28,8 @@ const removeUserFromRoomDB = require("../utils/removeUserFromRoomDB");
 
 const Room = require("../models/Room");
 const User = require("../models/User");
+const cookie = require('cookie')
+const jwt = require('jsonwebtoken')
 
 let ioRef;
 
@@ -49,8 +54,52 @@ module.exports = function (io) {
     return liveState.rooms[roomId];
   };
 
+    // (opcional, mas útil) autentica via cookie JWT no handshake
+  io.use((socket, next) => {
+    try {
+      const parsed = cookie.parse(socket.request.headers.cookie || '');
+      const token = parsed.token;
+      if (token) {
+        const { id } = jwt.verify(token, process.env.JWT_SECRET);
+        socket.userId = String(id);
+      }
+    } catch { /* segue anônimo */ }
+    next();
+  });
+
   // 1 - Quando um novo usuário se conecta, criamos um socket exclusivo para ele
   io.on("connection", (socket) => {
+     const origin = socket.handshake.headers?.origin || socket.handshake.headers?.referer;
+     console.log('🔌 WS connected from', origin);
+
+         // helper para entrar na sala pessoal
+    const joinPersonal = (uid) => {
+      const room = String(uid);
+      socket.userId = room;
+      socket.join(room);
+      const size = io.sockets.adapter.rooms.get(room)?.size || 0;
+      console.log(`👥 joined personal room ${room} size=${size}`);
+    };
+
+        // 1) se o cookie deu certo, já entra
+    if (socket.userId) {
+      joinPersonal(socket.userId);
+    } else {
+      console.log('⚠️ Socket sem userId (sem cookie JWT?)');
+    }
+
+
+       // 2) fallback: front envia o id após conectar
+    socket.on('setup', (uid) => {
+      if (!uid) return;
+      const room = String(uid);
+      // evita join duplicado
+      if (!io.sockets.adapter.rooms.get(room)?.has(socket.id)) {
+        joinPersonal(room);
+      }
+    });
+
+
     // console.log(`New client connected: ${socket.id}`);
 
     // ... se houver algum erro...
@@ -64,13 +113,13 @@ module.exports = function (io) {
     // });
 
     // Escuta quando o front-end emite "setup" e coloca o socket na sala com ID do usuário
-    socket.on("setup", (userId) => {
-      if (!userId) return;
-      socket.join(userId); // Adiciona o socket à sala com o ID do usuário
-      // console.log(
-      //   `✅ Usuário ${userId} entrou na sua sala pessoal via socket.`
-      // );
-    });
+    // socket.on("setup", (userId) => {
+    //   if (!userId) return;
+    //   socket.join(userId); // Adiciona o socket à sala com o ID do usuário
+    //   // console.log(
+    //   //   `✅ Usuário ${userId} entrou na sua sala pessoal via socket.`
+    //   // );
+    // });
 
     // 2 - Definimos os eventos que esse socket (usuário) poderá emitir durante a sessão
 

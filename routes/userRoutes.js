@@ -67,8 +67,8 @@ router.post("/google-login", async (req, res) => {
     const isProd = process.env.NODE_ENV === "production";
     res.cookie("token", jwtToken, {
       httpOnly: true,
-      secure: isProd,
       sameSite: isProd ? "none" : "lax",
+      secure: isProd,
       maxAge,
       path: "/",
     });
@@ -462,8 +462,8 @@ router.post("/login", async (req, res) => {
 
     res.cookie("token", token, {
       httpOnly: true,
-      secure: isProd,                 // ✅ prod: true | dev: false
       sameSite: isProd ? "None" : "Lax", // ✅ prod: None | dev: Lax
+      secure: isProd,                 // ✅ prod: true | dev: false
       // NÃO defina "domain" em dev; em prod só se precisar compartilhar entre subdomínios.
       path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000,
