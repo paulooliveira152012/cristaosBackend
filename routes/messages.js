@@ -202,8 +202,12 @@ router.post("/accept", protect, async (req, res) => {
     set.add(me);
     conv.participants = Array.from(set);
 
+     // ✅ marque como ativa
+    conv.status = "active";
     conv.waitingUser = null;
     conv.leavingUser = null;
+    conv.respondedAt = new Date();
+
     await conv.save();
 
     emitAccepted(req, conv._id, me);

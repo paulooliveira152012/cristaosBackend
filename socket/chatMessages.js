@@ -1,6 +1,6 @@
-const Message = require('../models/Message');
-const Usuario = require("../models/User")
 const Conversation = require('../models/Conversation')
+const Message = require('../models/Message');
+const User = require("../models/User")
 
 
 
@@ -44,7 +44,7 @@ const handleSendMessage = async ({ io, socket, userId, payload }) => {
 
   try {
     if (!username || !profileImage) {
-      const u = await Usuario.findById(userId)
+      const u = await User.findById(userId)
         .select("username profileImage")
         .lean();
       if (!u) {
@@ -130,46 +130,57 @@ const emitChatHistoryWhenMinimized = async (socket, roomId) => {
 
 // dm messaging
 // dm messaging
-const handleSendPrivateMessage = async (io, socket, data) => {
-  const { conversationId, sender, message } = data;
-
+// Enviar DM (payload vem do front como { conversationId, sender, message })
+const handleSendPrivateMessage = async ({ io, socket, conversationId, sender, message }) => {
   try {
-    const user = await Usuario.findById(sender).select("username profileImage");
-    if (!user) throw new Error("Usuário não encontrado");
+    // valida DM e participação
+    const conv = await Conversation.findById(conversationId).select("participants").lean();
+    const isParticipant = !!conv && (conv.participants || []).map(String).includes(String(sender));
+    if (!isParticipant) {
+      socket.emit("errorMessage", "Você não participa desta conversa.");
+      return;
+    }
 
-    const conversation = await Conversation.findById(conversationId);
-    if (!conversation) throw new Error("Conversa não encontrada");
+    const user = await User.findById(sender).select("username profileImage").lean();
+    if (!user) {
+      socket.emit("errorMessage", "Usuário inválido.");
+      return;
+    }
 
-    // pega o outro participante (o receiver)
-    const receiver = conversation.participants.find(
-      (participantId) => participantId.toString() !== sender
-    );
+    // monta receiver (o outro participante)
+    const receiver = (conv.participants || [])
+      .map(String)
+      .find((id) => id !== String(sender));
 
-    const newMsg = new Message({
+    // persiste
+    const newMsg = await Message.create({
       conversationId,
       userId: sender,
-      receiver, // 👈 novo campo adicionado
+      receiver,
       username: user.username,
       profileImage: user.profileImage || "",
       message,
       timestamp: new Date(),
     });
 
-    await newMsg.save();
-
-    io.to(conversationId).emit("newPrivateMessage", {
+    const payload = {
       _id: newMsg._id,
       conversationId,
       sender,
-      receiver, // <- opcional, mas pode ajudar no front
+      receiver,
       message,
       username: user.username,
-      profileImage: user.profileImage,
+      profileImage: user.profileImage || "",
       timestamp: newMsg.timestamp,
-    });
+    };
+
+    // emite para sala…
+    io.to(conversationId).emit("newPrivateMessage", payload);
+    // …e garante eco para o remetente (caso ele ainda não tenha entrado na sala)
+    socket.emit("newPrivateMessage", payload);
   } catch (err) {
     console.error("❌ Erro ao enviar mensagem privada:", err);
-    socket.emit("error", { message: "Erro ao enviar mensagem privada." });
+    socket.emit("errorMessage", "Erro ao enviar mensagem privada.");
   }
 };
 

@@ -29,6 +29,7 @@ const {
 const removeUserFromRoomDB = require("../utils/removeUserFromRoomDB");
 const Room = require("../models/Room");
 const User = require("../models/User");
+const Conversation = require("../models/Conversation");
 
 let ioRef;
 
@@ -106,6 +107,46 @@ const ensureRoom = (roomId) => {
   }
   return liveState.rooms[roomId];
 };
+
+/* ===================================================
+ * Presença em DMs: convId -> Map<userId, Set<socketId>> =====
+ * =================================================== */
+const dmPresence = new Map();
+
+function presenceFor(convId) {
+  const k = String(convId);
+  if (!dmPresence.has(k)) dmPresence.set(k, new Map());
+  return dmPresence.get(k);
+}
+
+function addPresence(convId, userId, socketId) {
+  const map = presenceFor(convId);
+  const uid = String(userId);
+  if (!map.has(uid)) map.set(uid, new Set());
+  map.get(uid).add(socketId);
+  return map;
+}
+
+function removePresence(convId, userId, socketId) {
+  const k = String(convId);
+  const uid = String(userId);
+  const map = dmPresence.get(k);
+  if (!map) return true; // ninguém mais na conversa
+
+  if (map.has(uid)) {
+    map.get(uid).delete(socketId);
+    if (map.get(uid).size === 0) map.delete(uid);
+  }
+  if (map.size === 0) dmPresence.delete(k);
+
+  // true => esse usuário ficou totalmente fora da conversa (todas as abas)
+  return !map.has(uid);
+}
+
+function currentUsers(convId) {
+  const map = dmPresence.get(String(convId));
+  return map ? Array.from(map.keys()) : [];
+}
 
 /* ===========================
  * Inicialização do Socket.IO
@@ -255,14 +296,118 @@ module.exports = function initSocket(io) {
     /* ==================
      * CHAT PRIVADO / DM
      * ================== */
+
+    // Usuário entra numa conversa privada
+    socket.on(
+      "joinPrivateChat",
+      requireAuth(socket, "joinPrivateChat", async ({ conversationId }) => {
+        const uid = socket.data.userId; // ✅ vem do token
+
+        const convId = String(conversationId || "");
+        if (!convId) return;
+
+        // (recomendado) valida se o usuário pertence à conversa
+        const conv = await Conversation.findById(convId)
+          .select("participants waitingUser")
+          .lean();
+        if (!conv) return;
+
+        const parts = (conv.participants || []).map(String);
+        const allowed =
+          parts.includes(uid) ||
+          (conv.waitingUser && String(conv.waitingUser) === uid);
+        if (!allowed) {
+          console.warn(
+            `🚫 user=${uid} tentou entrar em DM sem permissão`,
+            convId
+          );
+          return;
+        }
+
+        // entra nas salas
+        socket.join(convId);
+        socket.join(uid); // sala pessoal opcional
+
+        // presença (conta múltiplos sockets da MESMA pessoa)
+        const before = new Set(currentUsers(convId));
+        addPresence(convId, uid, socket.id);
+        const after = currentUsers(convId);
+
+        // se é a primeira aba desse user na conversa, avisa os outros
+        if (!before.has(uid)) {
+          const user = await User.findById(uid).select("username").lean();
+          socket.to(convId).emit("userJoinedPrivateChat", {
+            conversationId: convId,
+            joinedUser: { userId: uid, username: user?.username || "Usuário" },
+          });
+        }
+
+        // snapshot atualizado para todos na conversa
+        ioRef.to(convId).emit("currentUsersInPrivateChat", {
+          conversationId: convId,
+          users: after, // array de userIds
+        });
+
+        console.log(`🟢 ${uid} entrou na DM ${convId}`);
+      })
+    );
+
+    // Usuário sai da conversa privada
+    socket.on(
+      "leavePrivateChat",
+      requireAuth(socket, "leavePrivateChat", async ({ conversationId }) => {
+        const uid = socket.data.userId;
+        const convId = String(conversationId || "");
+        if (!convId) return;
+
+        socket.leave(convId);
+        socket.leave(uid);
+
+        // remove este socket; se não sobrou nenhum do usuário, ele saiu "de vez"
+        const fullyLeft = removePresence(convId, uid, socket.id);
+
+        if (fullyLeft) {
+          ioRef.to(convId).emit("userLeftPrivateChat", {
+            conversationId: convId,
+            leftUser: { userId: uid },
+          });
+          // (opcional) mensagem de sistema
+          ioRef.to(convId).emit("newPrivateMessage", {
+            system: true,
+            message: `Usuário saiu da conversa.`,
+            conversationId: convId,
+            timestamp: new Date(),
+          });
+        }
+
+        ioRef.to(convId).emit("currentUsersInPrivateChat", {
+          conversationId: convId,
+          users: currentUsers(convId),
+        });
+
+        console.log(`🔴 ${uid} saiu da DM ${convId}`);
+      })
+    );
+
+    // CHAT PRIVADO / DM
     socket.on(
       "sendPrivateMessage",
-      requireAuth(socket, "sendPrivateMessage", async (payload) => {
+      requireAuth(socket, "sendPrivateMessage", async (payload = {}) => {
+        const conversationId = String(payload.conversationId || "");
+        const message = (payload.text ?? payload.message ?? "").trim();
+        const sender = String(socket.data.userId || "");
+
+        if (!conversationId || !message) {
+          socket.emit("errorMessage", "Dados de DM incompletos.");
+          return;
+        }
+
         await handleSendPrivateMessage({
           io: ioRef,
           socket,
-          userId: socket.data.userId,
-          payload,
+          conversationId,
+          sender,
+          message,
         });
       })
     );
