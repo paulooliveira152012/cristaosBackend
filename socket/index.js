@@ -157,12 +157,9 @@ module.exports = function initSocket(io) {
     );
 
     // socket/index.js
-    socket.on(
-      "getOnlineUsers",
-      requireAuth(socket, "getOnlineUsers", () => {
-        socket.emit("onlineUsers", getOnlineUsers()); // snapshot só para quem pediu
-      })
-    );
+    socket.on("getOnlineUsers", () => {
+      socket.emit("onlineUsers", getOnlineUsers());
+    });
 
     socket.on(
       "removeSocket",
