@@ -20,7 +20,6 @@ const Comment = require("../models/Comment");
 const { protect } = require("../utils/auth");
 const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
-require("dotenv").config();
 const createNotificationUtil = require("../utils/notificationUtils");
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -74,7 +73,7 @@ router.post("/google-login", async (req, res) => {
     });
 
     const { password, ...safe } = user.toObject();
-    res.json(safe);
+    res.json({ user: safe, token: jwtToken }); // <-- devolve token
   } catch (err) {
     console.error("google-login error:", err);
     res
@@ -423,12 +422,14 @@ router.get("/current", protect, async (req, res) => {
 // User Login
 // routes/auth.js (ou onde fica seu login)
 router.post("/login", async (req, res) => {
-  console.log("Rota de login acessada");
+  console.log("✅ 1 Rota de login acessada");
   const { identifier, password } = req.body;
 
   try {
     if (!identifier || !password) {
-      return res.status(400).json({ message: "Todos os campos são necessários" });
+      return res
+        .status(400)
+        .json({ message: "Todos os campos são necessários" });
     }
 
     const isEmail = identifier.includes("@");
@@ -437,9 +438,12 @@ router.post("/login", async (req, res) => {
       : { phone: Number(identifier) };
 
     const user = await User.findOne(query);
-    if (!user) return res.status(400).json({ message: "Credenciais inválidas" });
+    if (!user)
+      return res.status(400).json({ message: "Credenciais inválidas" });
     if (!user.isVerified) {
-      return res.status(403).json({ message: "Verifique sua conta antes de fazer login." });
+      return res
+        .status(403)
+        .json({ message: "Verifique sua conta antes de fazer login." });
     }
     if (!user.password) {
       return res.status(403).json({
@@ -449,10 +453,13 @@ router.post("/login", async (req, res) => {
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: "Credenciais inválidas" });
+    if (!isMatch)
+      return res.status(400).json({ message: "Credenciais inválidas" });
 
     // JWT
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "7d",
+    });
     console.log("token JWT gerado:", token);
 
     // ⚙️ Opções do cookie: dev (HTTP) vs prod (HTTPS)
@@ -463,7 +470,7 @@ router.post("/login", async (req, res) => {
     res.cookie("token", token, {
       httpOnly: true,
       sameSite: isProd ? "None" : "Lax", // ✅ prod: None | dev: Lax
-      secure: isProd,                 // ✅ prod: true | dev: false
+      secure: isProd, // ✅ prod: true | dev: false
       // NÃO defina "domain" em dev; em prod só se precisar compartilhar entre subdomínios.
       path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000,
@@ -480,20 +487,35 @@ router.post("/login", async (req, res) => {
   }
 });
 
-
 // debug route for cookies set up
 router.get("/debug/cookies", (req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    return res.status(404).end();
+  }
   console.log("🥳🥳🥳 Cookies recebidos:", req.cookies);
   res.json(req.cookies);
 });
 
 // User Signout
 router.post("/signout", (req, res) => {
+  const isProd = process.env.NODE_ENV === "production";
+  res.clearCookie("token", {
+    httpOnly: true,
+    sameSite: isProd ? "none" : "lax",
+    secure: isProd,
+    path: "/",
+  });
   res.json({ msg: "Sessão encerrada!" });
 });
 
-router.delete("/delete-account/:id", async (req, res) => {
+router.delete("/delete-account/:id", protect, async (req, res) => {
   console.log("rota para deletar conta alcançada");
+
+  if (String(req.user._id) !== String(id)) {
+    return res
+      .status(403)
+      .json({ message: "Sem permissão para deletar esta conta." });
+  }
 
   const { id } = req.params;
 
@@ -624,11 +646,8 @@ router.post("/forgotPassword", async (req, res) => {
 
 // Route to update password
 router.put("/resetPassword", async (req, res) => {
+  console.log("resetando password...");
   const { newPassword, confirmNewPassword, token } = req.body;
-
-  console.log("received token:", token);
-  console.log("newPassword is:", newPassword);
-  console.log("confirmNewPassword is:", confirmNewPassword);
 
   // Validate passwords
   if (!newPassword || !confirmNewPassword) {
@@ -680,8 +699,14 @@ router.put("/resetPassword", async (req, res) => {
 
 // Atualizar informações do usuário
 // Atualizar informações do usuário
-router.put("/update/:id", async (req, res) => {
+router.put("/update/:id", protect, async (req, res) => {
   console.log("rota para atualizar alcançada...");
+
+  if (String(req.user._id) !== String(id)) {
+    return res
+      .status(403)
+      .json({ error: "Sem permissão para atualizar este usuário." });
+  }
 
   const { id } = req.params;
   const { currentPassword, newPassword, confirmPassword, email, ...updates } =

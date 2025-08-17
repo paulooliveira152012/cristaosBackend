@@ -19,6 +19,7 @@ const {
 // GET /api/dm/userConversations/:userId
 router.get("/userConversations/:userId", async (req, res) => {
   const { userId } = req.params;
+  console.log("✅ buscando conversas com userId:", userId)
 
   try {
     // const user = await User.findById(userId); // precisamos do usuário para pegar os timestamps

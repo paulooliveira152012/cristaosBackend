@@ -1,66 +1,87 @@
-let onlineUsers = {}; // Store users by their userId, not socketId
+// utils/onlineUsers.js
+const onlineByUser = new Map();   // userId -> { userId, username, profileImage, socketIds:Set }
+const userBySocket = new Map();   // socketId -> userId
 
-// Add user to the list of online users
-const addUser = (socketId, user) => {
-  if (!user || !user._id || !user.username) {
-    console.warn("⚠️ Dados de usuário incompletos no addUser:", user);
+// throttle simples para reduzir spam de broadcasts
+let lastEmit = 0;
+const EMIT_MIN_INTERVAL_MS = 800; // ajuste se quiser
+
+function addUser({ socketId, userId, username, profileImage }) {
+  if (!socketId || !userId) {
+    console.warn("⚠️ addUser: socketId/userId ausentes", { socketId, userId });
     return;
   }
-
-  // console.log("🟢 Adicionando user online:", user.username, user._id);
-  if (!onlineUsers[user._id]) {
-    // If the user is not in the list, add them and initialize socketIds
-    onlineUsers[user._id] = {
-      ...user,
-      socketIds: [socketId], // Store all connected sockets (tabs) for this user
-    };
+  let entry = onlineByUser.get(userId);
+  if (!entry) {
+    entry = { userId, username, profileImage, socketIds: new Set() };
+    onlineByUser.set(userId, entry);
   } else {
-    // If the user already exists, add the new socketId
-    onlineUsers[user._id].socketIds.push(socketId);
+    // atualiza dados visuais se vierem
+    if (username) entry.username = username;
+    if (profileImage) entry.profileImage = profileImage;
   }
-};
+  entry.socketIds.add(socketId);
+  userBySocket.set(socketId, userId);
+}
 
-// Retorna a lista de usuários online, sem os socketIds
-const getOnlineUsers = () => {
-  return Object.values(onlineUsers).map(({ socketIds, ...user }) => user);
-};
+function updateUserProfile(userId, { username, profileImage }) {
+  const entry = onlineByUser.get(userId);
+  if (!entry) return;
+  if (username != null) entry.username = username;
+  if (profileImage != null) entry.profileImage = profileImage;
+}
 
-// Remove user from the list
-const removeUser = (socketId) => {
-  for (let userId in onlineUsers) {
-    onlineUsers[userId].socketIds = onlineUsers[userId].socketIds.filter(
-      (id) => id !== socketId
-    );
+function removeSocket(socketId) {
+  const userId = userBySocket.get(socketId);
+  if (!userId) return null;
 
-    if (onlineUsers[userId].socketIds.length === 0) {
-      console.log(`🔴 Usuário ${userId} desconectado completamente`);
-      delete onlineUsers[userId];
-      return userId; // <- IMPORTANTE!
-    }
+  const entry = onlineByUser.get(userId);
+  userBySocket.delete(socketId);
+  if (!entry) return null;
+
+  entry.socketIds.delete(socketId);
+  if (entry.socketIds.size === 0) {
+    onlineByUser.delete(userId);
+    return userId; // desconectou completamente
   }
   return null;
-};
+}
 
-// Emit the list of online users to all clients
-const emitOnlineUsers = (io) => {
-  // console.log(
-  //   "📡 Enviando lista de onlineUsers:",
-  //   Object.values(onlineUsers).map((u) => u.username)
-  // );
+function isOnline(userId) {
+  return onlineByUser.has(String(userId));
+}
 
-  const list = Object.values(onlineUsers).map((user) => {
-    const { socketIds, ...userWithoutSockets } = user;
-    return userWithoutSockets;
-  });
+function getUserSockets(userId) {
+  const entry = onlineByUser.get(String(userId));
+  return entry ? Array.from(entry.socketIds) : [];
+}
 
-  // console.log("📢 Enviando lista de onlineUsers:", list);
+function getOnlineUsers() {
+  return Array.from(onlineByUser.values()).map(({ socketIds, userId, ...rest }) => ({
+    _id: userId,           // ✅ alias que o frontend espera
+    userId,                // (opcional) mantém também userId
+    ...rest,               // username, profileImage
+  }));
+}
 
-  io.emit("onlineUsers", list);
-};
+
+function emitOnlineUsers(io) {
+  console.log("emitindo onlineUsers:", getOnlineUsers().length)
+  
+  const now = Date.now();
+  if (now - lastEmit < EMIT_MIN_INTERVAL_MS) return; // throttle
+  lastEmit = now;
+  
+  io.emit("onlineUsers", getOnlineUsers());
+
+}
 
 module.exports = {
   addUser,
-  removeUser,
-  emitOnlineUsers,
+  updateUserProfile,
+  removeSocket,
+  isOnline,
+  getUserSockets,
   getOnlineUsers,
+  emitOnlineUsers,
 };
