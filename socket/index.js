@@ -175,38 +175,82 @@ module.exports = function initSocket(io) {
     /* =============
      * CHAT PÚBLICO
      * ============= */
+
+    // 👉 entrar em uma sala de chat (casa com o front)
+    socket.on(
+      "joinRoomChat",
+      requireAuth(socket, "joinRoomChat", async ({ roomId } = {}) => {
+        if (!roomId) return;
+        roomId = String(roomId);
+        socket.join(roomId);
+        // opcional: avisar sala
+        // ioRef.to(roomId).emit("room:joined", { roomId, userId: socket.data.userId });
+      })
+    );
+
+    // 👉 sair da sala quando a tela desmonta
+    socket.on(
+      "leaveRoomChat",
+      requireAuth(socket, "leaveRoomChat", async ({ roomId } = {}) => {
+        if (!roomId) return;
+        roomId = String(roomId);
+        socket.leave(roomId);
+        // opcional: avisar sala
+        // ioRef.to(roomId).emit("room:left", { roomId, userId: socket.data.userId });
+      })
+    );
+
+    // (Opcional) anti-flood simples para histórico
+    const lastHistoryReq = new Map(); // socket.id -> ts
+    socket.on(
+      "requestChatHistory",
+      requireAuth(socket, "requestChatHistory", async ({ roomId } = {}) => {
+        if (!roomId) {
+          socket.emit("errorMessage", "roomId ausente ao solicitar histórico.");
+          return;
+        }
+        const now = Date.now();
+        const last = lastHistoryReq.get(socket.id) || 0;
+        if (now - last < 700) return; // evita bursts
+        lastHistoryReq.set(socket.id, now);
+
+        await emitChatHistory(socket, String(roomId)); // <- sua função já existente
+      })
+    );
+
+    // enviar mensagem (garanta que seu handle exige roomId)
+    // enviar mensagem
     socket.on(
       "sendMessage",
-      requireAuth(socket, "sendMessage", async (payload) => {
+      requireAuth(socket, "sendMessage", async (payload = {}) => {
+        const roomId = String(payload.roomId || "mainChatRoom");
+        const rawText = payload.text ?? payload.message; // aceita .text ou .message do front
+        console.log("roomId:", roomId, "text:", rawText);
+
+        const text = (rawText || "").trim();
+        if (!text) {
+          socket.emit("errorMessage", "Mensagem vazia");
+          return;
+        }
+
         await handleSendMessage({
-          io: ioRef,
-          socket,
+          io: ioRef, // 👈 passe a instância do servidor Socket.IO
+          socket, // 👈 use socket para erros direcionados
           userId: socket.data.userId,
-          payload,
+          payload: { roomId, text },
         });
       })
     );
 
+    // deletar mensagem (idem)
     socket.on(
       "deleteMessage",
-      requireAuth(socket, "deleteMessage", async (payload) => {
+      requireAuth(socket, "deleteMessage", async (payload = {}) => {
         await handleDeleteMessage({
           io: ioRef,
           socket,
           userId: socket.data.userId,
-          payload,
-        });
-      })
-    );
-
-    socket.on(
-      "requestChatHistory",
-      requireAuth(socket, "requestChatHistory", async (payload) => {
-        await emitChatHistory({
-          io: ioRef,
-          socket,
-          userId: socket.data.userId,
-          payload,
+          payload, // ideal: conter roomId e messageId
         });
       })
     );

@@ -6,6 +6,12 @@ const Conversation = require('../models/Conversation')
 
 // Emit chat history for a specific room
 const emitChatHistory = async (socket, roomId) => {
+  console.log("emitChatHistory...")
+  if (!socket || !roomId) {
+    console.log("invalid socket:", socket, "or invalid roomId:", roomId)
+    return
+  }
+
   try {
     // Fetch messages for the specific room, sorted by timestamp
     const messages = await Message.find({ roomId }).sort({ timestamp: 1 }).limit(100).exec();
@@ -18,43 +24,66 @@ const emitChatHistory = async (socket, roomId) => {
 };
 
 // Handle incoming messages for a specific room
-const handleSendMessage = async (io, roomId, data) => {
-  console.log("handleSendMessage...")
-  if (!data || !data.username || !data.message || !data.userId) {
-    console.log("missing essential data")
-    io.to(roomId).emit('errorMessage', 'Invalid message data');
-    return;
+// Agora a assinatura bate com o index.js
+const handleSendMessage = async ({ io, socket, userId, payload }) => {
+  console.log("handleSendMessage...");
+
+  const roomId = String(payload?.roomId || "mainChatRoom");
+  const text = (payload?.text ?? payload?.message ?? "").trim();
+
+  if (!roomId || !text) {
+    return socket.emit("errorMessage", "Invalid message data");
+  }
+  if (!userId) {
+    return socket.emit("errorMessage", "Usuário não autenticado");
   }
 
+  // busca dados do usuário para preencher o documento
+  let username = payload?.username;
+  let profileImage = payload?.profileImage;
+
   try {
-    const newMessage = new Message({
+    if (!username || !profileImage) {
+      const u = await Usuario.findById(userId)
+        .select("username profileImage")
+        .lean();
+      if (!u) {
+        return socket.emit("errorMessage", "Usuário inválido");
+      }
+      username = username || u.username || "Usuário";
+      profileImage = profileImage || u.profileImage || "";
+    }
+
+    // persiste
+    const doc = await Message.create({
       roomId,
-      userId: data.userId,
-      username: data.username,
-      profileImage: data.profileImage,
-      message: data.message,
+      userId,
+      username,         // 👈 obrigatório no seu schema
+      profileImage,
+      message: text,    // campo do schema
       timestamp: new Date(),
     });
 
-    await newMessage.save(); // Save message to the database
-
-    console.log("Broadcasting message to room:", roomId, newMessage); // Log message for debugging
-
-
-    io.emit("newMessage", {
+    // payload normalizado para o front
+    const out = {
+      _id: doc._id,
+      userId: String(doc.userId),
+      username: doc.username,
+      profileImage: doc.profileImage || "",
+      message: doc.message,
+      timestamp: doc.timestamp || doc.createdAt,
       roomId,
-      message: data.message
-    })
+    };
 
-
-    // Emit the new message to all clients in the room (including the sender)
-    io.to(roomId).emit('receiveMessage', newMessage); // Broadcast to the room
-
+    // emite para a sala (inclui quem enviou, pois está na sala)
+    io.to(roomId).emit("newMessage", out);
   } catch (error) {
-    console.error('Error saving message:', error);
-    io.to(roomId).emit('errorMessage', `Error saving message: ${error.message}`);
+    console.error("Error saving message:", error);
+    socket.emit("errorMessage", `Error saving message: ${error.message}`);
   }
 };
+
+
 
 // Handle message deletion for a specific room
 const handleDeleteMessage = async (socket, messageId, userId, roomId) => {
