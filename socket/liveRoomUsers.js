@@ -1,5 +1,24 @@
-let liveRoomUsers = {}; // Object to store users by roomId
 const Room = require("../models/Room");
+const User = require("../models/User");
+const liveRoomUsers = new Map(); // roomId -> Map<userId, userData>
+
+const getRoomUsers = (roomId) => {
+  const rid = String(roomId);
+  const room = liveRoomUsers.get(rid);
+  if (!room) return [];
+  return Array.from(room.values());
+};
+
+
+const sanitize = (u) => ({
+  _id: String(u._id),
+  username: u.username,
+  profileImage: u.profileImage,
+  micOpen: !!u.micOpen,
+  minimized: !!u.minimized,
+  isSpeaker: !!u.isSpeaker,
+  socketId: u.socketId, // string
+});
 
 // Before accessing liveRoomUsers[roomId], check if it needs to be initialized
 const initializeRoomIfNeeded = (roomId) => {
@@ -8,130 +27,109 @@ const initializeRoomIfNeeded = (roomId) => {
   }
 };
 
-// Add user to a specific room and emit updated room members
-const addUserToRoom = (roomId, socketId, user, io) => {
-  console.log("🐶 backend socket liveRoomUsers")
-
-  if (!roomId || !user || !user._id) {
-    console.error("Invalid roomId or user data for adding to room");
-    return;
+async function ensureUserData(socket, userId) {
+  // tenta do próprio socket (mais rápido)
+  if (socket?.data?.username && typeof socket.data.profileImage !== "undefined") {
+    return {
+      username: socket.data.username,
+      profileImage: socket.data.profileImage,
+    };
   }
-
-  // Inicializa array da sala se necessário
-  liveRoomUsers[roomId] = liveRoomUsers[roomId] || [];
-
-  const existingUserIndex = liveRoomUsers[roomId].findIndex(
-    (u) => u._id === user._id
-  );
-
-if (existingUserIndex !== -1) {
-  const existingUser = liveRoomUsers[roomId][existingUserIndex];
-
-  existingUser.socketId = socketId;
-
-  // 🔁 Remova esses resets aqui
-  // existingUser.micOpen = false;
-  // existingUser.isSpeaker = false;
-
-  existingUser.minimized = false;
-
-  console.log(`🔁 User ${user.username} reentrou na sala ${roomId}`);
+  // fallback no banco
+  const u = await User.findById(userId).select("username profileImage").lean();
+  return {
+    username: u?.username || "Usuário",
+    profileImage: u?.profileImage || "",
+  };
 }
- else {
-    // Usuário novo na sala
-    liveRoomUsers[roomId].push({
-      socketId,
-      ...user,
-      micOpen: false,
-      minimized: false,
-      isSpeaker: false,
-    });
 
-    console.log(`✅ User ${user.username} added to room ${roomId}`);
+
+// Add user to a specific room and emit updated room members
+// Add user to a specific room and emit updated room members
+// ✅ mantém FORMATO "const addUserToRoom = async (...) => {}"
+const addUserToRoom = async ({ io, socket, roomId, userId }) => {
+   const rid = String(roomId);
+  const uid = String(userId);
+
+  let room = liveRoomUsers.get(rid);
+  if (!room) {
+    room = new Map();
+    liveRoomUsers.set(rid, room);
   }
 
-  // Emite membros atualizados
-  emitLiveRoomUsers(io, roomId);
+  const existed = room.has(uid);
+  const base = room.get(uid) || {};
+  const { username, profileImage } = await ensureUserData(socket, uid);
+
+  room.set(uid, {
+    _id: uid,
+    username,
+    profileImage,
+    micOpen: !!base.micOpen,
+    minimized: !!base.minimized,
+    isSpeaker: !!base.isSpeaker,
+    socketId: socket.id,
+  });
+
+  return { changed: !existed };
 };
 
 // Remove user from a specific room
-const removeUserFromRoom = async (roomId, userId, io) => {
-  if (!roomId || !io) {
-    console.error("Room ID or Socket.io instance is not provided.");
-    return;
-  }
+// ✅ ASSINATURA NOVA (bate com o index.js)
+const removeUserFromRoom = async ({ io, roomId, userId }) => {
+  const rid = String(roomId);
+  const uid = String(userId);
 
-  if (!liveRoomUsers[roomId]) {
-    console.log(`Room with ID ${roomId} does not exist`);
-    return;
-  }
+  const room = liveRoomUsers.get(rid);
+  if (!room) return { changed: false };
 
-  const initialLength = liveRoomUsers[roomId].length;
-  liveRoomUsers[roomId] = liveRoomUsers[roomId].filter(
-    (user) => user._id !== userId
-  );
-
-  // Remove do banco de dados também
-  try {
-    await Room.findByIdAndUpdate(roomId, {
-      $pull: { roomMembers: { _id: userId } },
-    });
-    console.log(`Usuário ${userId} removido do banco da sala ${roomId}`);
-  } catch (err) {
-    console.error("Erro ao remover usuário do banco:", err);
-  }
-
-  if (liveRoomUsers[roomId].length === 0) {
-    console.log(`No users left in room ${roomId}, deleting room`);
-    delete liveRoomUsers[roomId];
-  } else if (liveRoomUsers[roomId].length < initialLength) {
-    console.log(`User with userId ${userId} removed from room ${roomId}`);
-  }
-
-  // Emit updated room data after removing a user
-  emitLiveRoomUsers(io, roomId);
+  const changed = room.delete(uid);
+  if (room.size === 0) liveRoomUsers.delete(rid);
+  return { changed };
 };
+
 
 // Emit the list of users in a room to all clients in that room
-const emitLiveRoomUsers = (io, roomId) => {
-  console.log("🐶 emitLiveRoomUsers");
+// 🔔 snapshot: se passar `targetSocket`, envia só pra ele; senão, broadcast pra sala
+// 🔔 snapshot: se passar `targetSocket`, envia só pra ele; senão, broadcast pra sala
+// 🔔 snapshot: se passar targetSocket, envia só pra ele; senão, broadcast pra sala
+function emitLiveRoomUsers(io, roomId, targetSocket) {
+  const rid = String(roomId);
+  const users = getRoomUsers(rid).map(u => ({
+    _id: String(u._id),
+    username: u.username,
+    profileImage: u.profileImage,
+    micOpen: !!u.micOpen,
+    minimized: !!u.minimized,
+    isSpeaker: !!u.isSpeaker,
+    socketId: u.socketId,
+  }));
+  const speakers = users.filter(u => u.isSpeaker);
 
-  if (!io || !roomId) {
-    console.error("Socket.io instance or roomId is not defined.");
-    return;
-  }
+  const payload = { roomId: rid, users, speakers };
 
-  const usersInRoom = liveRoomUsers[roomId] || [];
+  if (targetSocket) targetSocket.emit("liveRoomUsers", payload);
+  else io.to(rid).emit("liveRoomUsers", payload);
+}
 
-  io.to(roomId).emit("liveRoomUsers", usersInRoom); // <-- nome certo
 
-  console.log(`📤 Enviando usuários da sala ${roomId}:`, usersInRoom);
-};
+
+
 
 // Toggle the microphone status of a user in the room
-const toggleMicrophone = (roomId, socketId, microphoneOn, io) => {
-  console.log("🐶 emitLiveRoomUsers")
-  const user = liveRoomUsers[roomId]?.find(
-    (user) => user.socketId === socketId
-  );
+const toggleMicrophone = ({ io, roomId, userId, on }) => {
+  console.log("toggling microphone");
+    const rid = String(roomId);
+  const uid = String(userId);
+  const room = liveRoomUsers.get(rid);
+  if (!room) return { changed: false };
 
-  if (user) {
-    user.micOpen = microphoneOn;
-    console.log(
-      `User ${user.username} in room ${roomId} updated microphone status: ${microphoneOn}`
-    );
+  const u = room.get(uid);
+  if (!u) return { changed: false };
 
-    // ✅ Atualiza também no banco de dados
-    const Room = require("../models/Room");
-    Room.updateOne(
-      { _id: roomId, "roomMembers._id": user._id },
-      { $set: { "roomMembers.$.micOpen": microphoneOn } }
-    ).catch(console.error);
-
-    emitLiveRoomUsers(io, roomId);
-  } else {
-    console.log(`User with socketId ${socketId} not found in room ${roomId}`);
-  }
+  u.micOpen = !!on;
+  room.set(uid, u);
+  return { changed: true };
 };
 
 // Mark a user as minimized or restored in the room
@@ -161,51 +159,20 @@ const minimizeUser = (roomId, userId, isMinimized, microphoneOn, io) => {
   }
 };
 
-const makeUserSpeaker = (roomId, userId, io) => {
-  console.log("🤑 1 - makeUserSpeaker socket/liveRoomUsers.js/makeUserSpeaker")
-  const userList = liveRoomUsers[roomId];
-  if (!userList) return;
+// socket/liveRoomUsers.js
+const makeUserSpeaker = async ({ io, roomId, userId }) => {
+    const rid = String(roomId);
+  const uid = String(userId);
+  const room = liveRoomUsers.get(rid);
+  if (!room) return { changed: false };
 
-  const user = userList.find((u) => u._id === userId);
-  if (user) {
-    user.isSpeaker = true;
-    user.micOpen = false;
-    console.log(`✅ ${user.username} agora é speaker na sala ${roomId}`);
+  const u = room.get(uid);
+  if (!u) return { changed: false };
 
-    // ✅ Atualiza também no banco
-    const Room = require("../models/Room");
-    Room.updateOne(
-      { _id: roomId, "roomMembers._id": userId },
-      {
-        $set: {
-          "roomMembers.$.isSpeaker": true,
-          "roomMembers.$.micOpen": false,
-        },
-      }
-    )
-      .then(() => {
-        console.log(`✅ MongoDB: ${user.username} agora é speaker`);
-      })
-      .catch((err) => {
-        console.error("Erro ao atualizar MongoDB:", err);
-      });
-
-    if (user._id && user.username && user.profileImage !== undefined) {
-      io.to(roomId).emit("userJoinsStage", {
-        user: {
-          _id: user._id,
-          username: user.username,
-          profileImage: user.profileImage,
-          isSpeaker: true,
-          micOpen: false,
-        },
-      });
-    } else {
-      console.warn("⚠️ Usuário incompleto ao tentar subir ao palco:", user);
-    }
-
-    emitLiveRoomUsers(io, roomId);
-  }
+  u.isSpeaker = true;
+  if (typeof on === "boolean") u.micOpen = !!on;
+  room.set(uid, u);
+  return { changed: true };
 };
 
 module.exports = {

@@ -4,7 +4,7 @@ const userBySocket = new Map();   // socketId -> userId
 
 // throttle simples para reduzir spam de broadcasts
 let lastEmit = 0;
-const EMIT_MIN_INTERVAL_MS = 800; // ajuste se quiser
+const EMIT_MIN_INTERVAL_MS = 400; // ajuste se quiser
 
 function addUser({ socketId, userId, username, profileImage }) {
   if (!socketId || !userId) {
@@ -65,16 +65,17 @@ function getOnlineUsers() {
 }
 
 
-function emitOnlineUsers(io) {
-  console.log("emitindo onlineUsers:", getOnlineUsers().length)
-  
+function emitOnlineUsers(io, { force = false } = {}) {
   const now = Date.now();
-  if (now - lastEmit < EMIT_MIN_INTERVAL_MS) return; // throttle
-  lastEmit = now;
-  
+  if (!force) {
+    if (now - lastEmit < EMIT_MIN_INTERVAL_MS) return;
+    lastEmit = now;
+  } else {
+    lastEmit = now;
+  }
   io.emit("onlineUsers", getOnlineUsers());
-
 }
+
 
 module.exports = {
   addUser,
