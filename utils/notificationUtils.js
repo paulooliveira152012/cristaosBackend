@@ -14,6 +14,15 @@ const createNotificationUtil = async ({
   try {
     // não notifica a si mesmo
     if (String(recipient) === String(fromUser)) return;
+    console.log("Criando notificação:", {
+      recipient,
+      fromUser,
+      type,
+      content,
+      listingId,
+      commentId,
+      conversationId,
+    });
 
     // 1) cria e salva
     const doc = await Notification.create({

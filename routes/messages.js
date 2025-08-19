@@ -63,7 +63,8 @@ router.get("/userConversations/:userId", async (req, res) => {
 // routes/dm.js (trecho)
 router.post("/sendChatRequest", protect, async (req, res) => {
   try {
-    const { requester, requested } = req.body;
+    const requester  = req.user._id; // id do usuário que está enviando o convite 
+    const { requested } = req.body || {}
 
     if (!requester || !requested)
       return res.status(400).json({ error: "Missing requester or requested ID" });
