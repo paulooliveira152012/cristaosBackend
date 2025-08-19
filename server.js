@@ -63,16 +63,15 @@ require('./socket')(io);
 /* ----------------------------- Middlewares ------------------------------ */
 
 // CORS para requisições “normais”
-app.use(cors({
+
+// Preflight (OPTIONS) e CORS global para as respostas reais:
+app.options('*', cors({
   origin: originCheck,
   credentials: true,
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  exposedHeaders: ['Set-Cookie'],
 }));
-
-// (opcional, ajuda em proxies mais “chatos” com preflight)
-app.options('*', cors({
+app.use(cors({
   origin: originCheck,
   credentials: true,
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
