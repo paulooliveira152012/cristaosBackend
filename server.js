@@ -51,8 +51,9 @@ const originCheck = (origin, cb) => {
 const io = socketIo(server, {
   cors: {
     origin: originCheck,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    methods: ['GET','POST','PUT','DELETE','PATCH','OPTIONS'],
     credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization'], // ⬅️ add
   },
 });
 
@@ -61,7 +62,23 @@ require('./socket')(io);
 
 /* ----------------------------- Middlewares ------------------------------ */
 
-app.use(cors({ origin: originCheck, credentials: true }));
+// CORS para requisições “normais”
+app.use(cors({
+  origin: originCheck,
+  credentials: true,
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Set-Cookie'],
+}));
+
+// (opcional, ajuda em proxies mais “chatos” com preflight)
+app.options('*', cors({
+  origin: originCheck,
+  credentials: true,
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
 app.use(cookieParser());
 app.use(express.json());
 
