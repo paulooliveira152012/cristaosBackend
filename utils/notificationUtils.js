@@ -1,24 +1,23 @@
+// utils/notificationUtils.js
 const Notification = require("../models/Notification");
 
 const createNotificationUtil = async ({
-  io, // 🔥 receber o io aqui
+  io, // precisa receber o io do server (req.app.get('io'))
   recipient,
   fromUser,
   type,
   content,
   listingId,
   commentId,
-  conversationId = null, // 🔄 corrigido typo
+  conversationId = null,
 }) => {
-  console.log("🟢 [3] notificationUtils, mandar a notificação via socket");
-  console.log("io:", io);
-  console.log("recipient:", recipient);
-
   try {
-    if (recipient.toString() === fromUser.toString()) return; // não notifica a si mesmo
+    // não notifica a si mesmo
+    if (String(recipient) === String(fromUser)) return;
 
-    const newNotification = new Notification({
-      type, // "like", "comment", etc.
+    // 1) cria e salva
+    const doc = await Notification.create({
+      type,
       recipient,
       fromUser,
       content,
@@ -27,36 +26,43 @@ const createNotificationUtil = async ({
       conversationId,
     });
 
-    await newNotification.save();
+    // 2) popula o mínimo que o front usa
+    const populated = await doc.populate("fromUser", "username profileImage");
 
-    console.log("🔔 Notificação criada:", type);
-    console.log("emitindo notificação via socket...");
+    // 3) payload “plano” (sem aninhar em { notification: ... })
+    const payload = {
+      _id: String(populated._id),
+      type: populated.type,
+      content: populated.content,
+      isRead: !!populated.isRead,
+      recipient: String(populated.recipient),
+      listingId: populated.listingId ? String(populated.listingId) : undefined,
+      commentId: populated.commentId ? String(populated.commentId) : undefined,
+      conversationId: populated.conversationId
+        ? String(populated.conversationId)
+        : undefined,
+      fromUser: populated.fromUser
+        ? {
+            _id: String(populated.fromUser._id),
+            username: populated.fromUser.username || "Usuário",
+            profileImage: populated.fromUser.profileImage || "",
+          }
+        : undefined,
+      createdAt: populated.createdAt,
+    };
 
-    // 🔥 Emitir o socket para o destinatário, se io estiver presente
+    // 4) emite para a sala pessoal do destinatário
     if (io) {
-      console.log("io:", io);
-      io.to(recipient.toString()).emit("newNotification", {
-        _id: newNotification._id,
-        type,
-        fromUser,
-        content,
-        listingId,
-        commentId,
-        conversationId,
-        createdAt: newNotification.createdAt,
-      });
-      console.log("📤 Notificação emitida via socket");
+      io.to(String(recipient)).emit("newNotification", payload);
+      console.log("🔔 [socket] newNotification ->", String(recipient));
     } else {
-      console.log("notificacnao de socket nao enviada...");
+      console.warn("⚠️ io indisponível; não foi possível emitir a notificação.");
     }
+
+    return populated;
   } catch (error) {
-    console.error("❌ Erro ao criar notificação:", error.message);
+    console.error("❌ Erro ao criar/emitir notificação:", error);
   }
 };
 
 module.exports = createNotificationUtil;
-
-/*
-  curtida de comentario
-  reply de comentario
-*/
