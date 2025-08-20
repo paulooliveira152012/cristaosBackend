@@ -290,12 +290,7 @@ module.exports = function initSocket(io) {
             conversationId: convId,
             leftUser: { userId: uid },
           });
-          io.to(convId).emit("newPrivateMessage", {
-            system: true,
-            message: "Usuário saiu da conversa.",
-            conversationId: convId,
-            timestamp: new Date(),
-          });
+          // ❌ NÃO emita "newPrivateMessage" aqui
         }
 
         io.to(convId).emit("currentUsersInPrivateChat", {
