@@ -122,13 +122,11 @@ router.post("/sendChatRequest", protect, async (req, res) => {
 
       emitInvited(io, requested, pending);
       emitParticipantChanged(req, pending);
-      return res
-        .status(200)
-        .json({
-          message: "Convite atualizado",
-          conversationId: pending._id,
-          status: "pending",
-        });
+      return res.status(200).json({
+        message: "Convite atualizado",
+        conversationId: pending._id,
+        status: "pending",
+      });
     }
 
     // 3) Se existe DECLINED ou LEFT → podemos reativar como pendente (reconvite)
@@ -162,13 +160,11 @@ router.post("/sendChatRequest", protect, async (req, res) => {
       });
       emitInvited(io, requested, old);
       emitParticipantChanged(req, old);
-      return res
-        .status(200)
-        .json({
-          message: "Reconvite enviado",
-          conversationId: old._id,
-          status: "pending",
-        });
+      return res.status(200).json({
+        message: "Reconvite enviado",
+        conversationId: old._id,
+        status: "pending",
+      });
     }
 
     // 4) Não existe nada → cria PENDENTE
@@ -197,13 +193,11 @@ router.post("/sendChatRequest", protect, async (req, res) => {
     emitInvited(io, requested, conv);
     emitParticipantChanged(req, conv);
 
-    return res
-      .status(200)
-      .json({
-        message: "Convite enviado",
-        conversationId: conv._id,
-        status: "pending",
-      });
+    return res.status(200).json({
+      message: "Convite enviado",
+      conversationId: conv._id,
+      status: "pending",
+    });
   } catch (error) {
     console.error("sendChatRequest error:", error?.message || error);
     return res.status(500).json({ error: "Internal server error" });
@@ -242,7 +236,7 @@ router.post("/accept", protect, async (req, res) => {
 
     const io = req.app.get("io");
 
-    // pseudo-código no backend:
+    // pseudo-código no backend para mensagem de sistema:
     const sys = await Message.create({
       conversationId: conv._id,
       type: "system",
@@ -254,6 +248,13 @@ router.post("/accept", protect, async (req, res) => {
 
     emitAccepted(req, conv._id, me);
     emitParticipantChanged(req, conv);
+
+    // remover notificação do banco
+    await Notification.deleteMany({
+      recipient: me,
+      type: "chat_request",
+      conversationId: conv._id,
+    });
 
     res.status(200).json({ message: "Convite aceito", conversation: conv });
   } catch (err) {
@@ -550,6 +551,13 @@ router.post("/startNewConversation", protect, async (req, res) => {
         $pull: { chatRequestsReceived: requester },
       });
       if (notificationId) await Notification.findByIdAndDelete(notificationId);
+
+      // remover notificação do banco
+      await Notification.deleteMany({
+        recipient: me,
+        type: "chat_request",
+        conversationId: conv._id,
+      });
 
       emitParticipantChanged(req, existingConversation); // DOC
       return res.status(200).json({
