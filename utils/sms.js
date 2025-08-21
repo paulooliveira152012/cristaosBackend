@@ -20,7 +20,7 @@ const sendVerificationSMS = async (to, message) => {
       messagingServiceSid, // ou: from: process.env.TWILIO_PHONE_NUMBER
     });
 
-    console.log("✅ SMS enviado:", res.sid);
+    console.log(" SMS enviado:", res.sid);
     return true;
   } catch (error) {
     console.error("❌ Erro ao enviar SMS:", error);

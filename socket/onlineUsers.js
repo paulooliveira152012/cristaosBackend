@@ -1,6 +1,6 @@
 // utils/onlineUsers.js
-const onlineByUser = new Map();   // userId -> { userId, username, profileImage, socketIds:Set }
-const userBySocket = new Map();   // socketId -> userId
+const onlineByUser = new Map(); // userId -> { userId, username, profileImage, socketIds:Set }
+const userBySocket = new Map(); // socketId -> userId
 
 // throttle simples para reduzir spam de broadcasts
 let lastEmit = 0;
@@ -57,13 +57,14 @@ function getUserSockets(userId) {
 }
 
 function getOnlineUsers() {
-  return Array.from(onlineByUser.values()).map(({ socketIds, userId, ...rest }) => ({
-    _id: userId,           // ✅ alias que o frontend espera
-    userId,                // (opcional) mantém também userId
-    ...rest,               // username, profileImage
-  }));
+  return Array.from(onlineByUser.values()).map(
+    ({ socketIds, userId, ...rest }) => ({
+      _id: userId, //  alias que o frontend espera
+      userId, // (opcional) mantém também userId
+      ...rest, // username, profileImage
+    })
+  );
 }
-
 
 function emitOnlineUsers(io, { force = false } = {}) {
   const now = Date.now();
@@ -75,7 +76,6 @@ function emitOnlineUsers(io, { force = false } = {}) {
   }
   io.emit("onlineUsers", getOnlineUsers());
 }
-
 
 module.exports = {
   addUser,

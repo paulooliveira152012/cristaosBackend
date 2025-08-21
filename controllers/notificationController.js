@@ -21,7 +21,7 @@ exports.getNotifications = async (req, res) => {
 // Criar uma nova notificação
 exports.createNotificationController = async (req, res) => {
   try {
-    const io = req.app.get("io"); // ✅ pegue uma vez só
+    const io = req.app.get("io"); //  pegue uma vez só
     if (!io) {
       return res.status(500).json({ message: "Socket.io indisponível" });
     }

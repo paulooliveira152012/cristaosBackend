@@ -9,7 +9,6 @@ const getRoomUsers = (roomId) => {
   return Array.from(room.values());
 };
 
-
 const sanitize = (u) => ({
   _id: String(u._id),
   username: u.username,
@@ -29,7 +28,10 @@ const initializeRoomIfNeeded = (roomId) => {
 
 async function ensureUserData(socket, userId) {
   // tenta do próprio socket (mais rápido)
-  if (socket?.data?.username && typeof socket.data.profileImage !== "undefined") {
+  if (
+    socket?.data?.username &&
+    typeof socket.data.profileImage !== "undefined"
+  ) {
     return {
       username: socket.data.username,
       profileImage: socket.data.profileImage,
@@ -43,12 +45,11 @@ async function ensureUserData(socket, userId) {
   };
 }
 
-
 // Add user to a specific room and emit updated room members
 // Add user to a specific room and emit updated room members
-// ✅ mantém FORMATO "const addUserToRoom = async (...) => {}"
+//  mantém FORMATO "const addUserToRoom = async (...) => {}"
 const addUserToRoom = async ({ io, socket, roomId, userId }) => {
-   const rid = String(roomId);
+  const rid = String(roomId);
   const uid = String(userId);
 
   let room = liveRoomUsers.get(rid);
@@ -75,7 +76,7 @@ const addUserToRoom = async ({ io, socket, roomId, userId }) => {
 };
 
 // Remove user from a specific room
-// ✅ ASSINATURA NOVA (bate com o index.js)
+//  ASSINATURA NOVA (bate com o index.js)
 const removeUserFromRoom = async ({ io, roomId, userId }) => {
   const rid = String(roomId);
   const uid = String(userId);
@@ -88,14 +89,13 @@ const removeUserFromRoom = async ({ io, roomId, userId }) => {
   return { changed };
 };
 
-
 // Emit the list of users in a room to all clients in that room
 // 🔔 snapshot: se passar `targetSocket`, envia só pra ele; senão, broadcast pra sala
 // 🔔 snapshot: se passar `targetSocket`, envia só pra ele; senão, broadcast pra sala
 // 🔔 snapshot: se passar targetSocket, envia só pra ele; senão, broadcast pra sala
 function emitLiveRoomUsers(io, roomId, targetSocket) {
   const rid = String(roomId);
-  const users = getRoomUsers(rid).map(u => ({
+  const users = getRoomUsers(rid).map((u) => ({
     _id: String(u._id),
     username: u.username,
     profileImage: u.profileImage,
@@ -104,7 +104,7 @@ function emitLiveRoomUsers(io, roomId, targetSocket) {
     isSpeaker: !!u.isSpeaker,
     socketId: u.socketId,
   }));
-  const speakers = users.filter(u => u.isSpeaker);
+  const speakers = users.filter((u) => u.isSpeaker);
 
   const payload = { roomId: rid, users, speakers };
 
@@ -112,14 +112,10 @@ function emitLiveRoomUsers(io, roomId, targetSocket) {
   else io.to(rid).emit("liveRoomUsers", payload);
 }
 
-
-
-
-
 // Toggle the microphone status of a user in the room
 const toggleMicrophone = ({ io, roomId, userId, on }) => {
   console.log("toggling microphone");
-    const rid = String(roomId);
+  const rid = String(roomId);
   const uid = String(userId);
   const room = liveRoomUsers.get(rid);
   if (!room) return { changed: false };
@@ -161,7 +157,7 @@ const minimizeUser = (roomId, userId, isMinimized, microphoneOn, io) => {
 
 // socket/liveRoomUsers.js
 const makeUserSpeaker = async ({ io, roomId, userId }) => {
-    const rid = String(roomId);
+  const rid = String(roomId);
   const uid = String(userId);
   const room = liveRoomUsers.get(rid);
   if (!room) return { changed: false };

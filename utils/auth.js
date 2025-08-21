@@ -11,7 +11,7 @@ const getTokenFromReq = (req) => {
   return req.cookies?.token || null;
 };
 
-// ✅ protege rotas privadas (aceita Bearer e/ou cookie)
+//  protege rotas privadas (aceita Bearer e/ou cookie)
 const protect = async (req, res, next) => {
   try {
     const token = getTokenFromReq(req);
@@ -51,7 +51,7 @@ const protect = async (req, res, next) => {
   }
 };
 
-// ✅ verifica token (por exemplo, em links de verificação)
+//  verifica token (por exemplo, em links de verificação)
 const verifyToken = async (req, res, next) => {
   try {
     const token = getTokenFromReq(req);
@@ -72,7 +72,9 @@ const verifyLeader = (req, res, next) => {
   if (!req.user || (req.user.leader !== true && req.user.leader !== "true")) {
     return res
       .status(403)
-      .json({ error: "Acesso negado. Apenas líderes podem realizar essa ação." });
+      .json({
+        error: "Acesso negado. Apenas líderes podem realizar essa ação.",
+      });
   }
   next();
 };

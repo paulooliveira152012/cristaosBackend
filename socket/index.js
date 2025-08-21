@@ -353,7 +353,7 @@ module.exports = function initSocket(io) {
       "joinAsSpeaker",
       requireAuth(socket, "joinAsSpeaker", async ({ roomId, on }) => {
         if (!roomId) return;
-        // ✅ garante que a sala e o usuário existem no registro
+        //  garante que a sala e o usuário existem no registro
         await addUserToRoom({ io, socket, roomId, userId: socket.data.userId });
         await makeUserSpeaker({ io, roomId, userId: socket.data.userId, on });
         emitLiveRoomUsers(io, roomId);

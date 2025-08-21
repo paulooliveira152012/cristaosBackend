@@ -48,7 +48,7 @@ router.post("/listings/:listingId/comment", async (req, res) => {
     const io = req.app.get("io");
 
     // send notification
-    // ✅ Se for um novo like e o dono do post for diferente do usuário
+    //  Se for um novo like e o dono do post for diferente do usuário
     if (listing.userId.toString() !== userId.toString()) {
       await createNotificationUtil({
         io,
@@ -137,7 +137,7 @@ router.post("/listings/:parentCommentId/reply", async (req, res) => {
     const io = req.app.get("io");
 
     // send notification
-    // ✅ Se for um novo like e o dono do post for diferente do usuário
+    //  Se for um novo like e o dono do post for diferente do usuário
     if (parentComment.user.toString() !== userId.toString()) {
       await createNotificationUtil({
         io,

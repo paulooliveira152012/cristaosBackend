@@ -19,7 +19,7 @@ const {
 // GET /api/dm/userConversations/:userId
 router.get("/userConversations/:userId", async (req, res) => {
   const { userId } = req.params;
-  console.log("✅ buscando conversas com userId:", userId);
+  console.log(" buscando conversas com userId:", userId);
 
   try {
     // const user = await User.findById(userId); // precisamos do usuário para pegar os timestamps
@@ -39,9 +39,9 @@ router.get("/userConversations/:userId", async (req, res) => {
     //     const unreadCount = await Message.countDocuments({
     //       conversationId: chat._id,
     //       timestamp: { $gt: lastRead },
-    //       sender: { $ne: userId }, // ✅ Corrigido aqui
-    //       receiver: userId, // ✅ Só mensagens destinadas a ele
-    //       read: false, // ✅ Só não lidas
+    //       sender: { $ne: userId }, //  Corrigido aqui
+    //       receiver: userId, //  Só mensagens destinadas a ele
+    //       read: false, //  Só não lidas
     //     });
 
     //     return {
@@ -226,7 +226,7 @@ router.post("/accept", protect, async (req, res) => {
     set.add(me);
     conv.participants = Array.from(set);
 
-    // ✅ marque como ativa
+    //  marque como ativa
     conv.status = "active";
     conv.waitingUser = null;
     conv.leavingUser = null;
@@ -249,10 +249,14 @@ router.post("/accept", protect, async (req, res) => {
     emitAccepted(req, conv._id, me);
     emitParticipantChanged(req, conv);
 
+    console.log(
+      `✅ removing notification for chatRequest ${conv._id} for user ${me}`
+    );
+
     // remover notificação do banco
     await Notification.deleteMany({
       recipient: me,
-      type: "chat_request",
+      type: { $in: ["chat_request", "chat_reinvite"] },
       conversationId: conv._id,
     });
 

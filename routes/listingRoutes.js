@@ -242,7 +242,7 @@ router.put("/listingLike/:listingId", async (req, res) => {
 
     // console.log("📡 io existe?", !!io); // true/false
 
-    // ✅ Se for um novo like e o dono do post for diferente do usuário
+    //  Se for um novo like e o dono do post for diferente do usuário
     if (!isLiked && listing.userId.toString() !== userId.toString()) {
       await createNotificationUtil({
         io: req.app.get("io"),

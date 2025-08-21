@@ -1,6 +1,3 @@
-
-
-
 const {
   addUser,
   removeUser,
@@ -28,8 +25,8 @@ const removeUserFromRoomDB = require("../utils/removeUserFromRoomDB");
 
 const Room = require("../models/Room");
 const User = require("../models/User");
-const cookie = require('cookie');
-const jwt = require('jsonwebtoken');
+const cookie = require("cookie");
+const jwt = require("jsonwebtoken");
 
 let ioRef;
 
@@ -85,10 +82,7 @@ const requireAuth = (socket, name, fn) => {
   };
 };
 
-
-
 const privateChatPresence = {}; // Ex: { conversationId: [userId1, userId2] }
-
 
 // wrapper para iniciar socket
 module.exports = function (io) {
@@ -104,25 +98,28 @@ module.exports = function (io) {
     return liveState.rooms[roomId];
   };
 
-    // (opcional, mas útil) autentica via cookie JWT no handshake
+  // (opcional, mas útil) autentica via cookie JWT no handshake
   io.use((socket, next) => {
     try {
-      const parsed = cookie.parse(socket.request.headers.cookie || '');
+      const parsed = cookie.parse(socket.request.headers.cookie || "");
       const token = parsed.token;
       if (token) {
         const { id } = jwt.verify(token, process.env.JWT_SECRET);
         socket.userId = String(id);
       }
-    } catch { /* segue anônimo */ }
+    } catch {
+      /* segue anônimo */
+    }
     next();
   });
 
   // 1 - Quando um novo usuário se conecta, criamos um socket exclusivo para ele
   io.on("connection", (socket) => {
-     const origin = socket.handshake.headers?.origin || socket.handshake.headers?.referer;
-     console.log('🔌 WS connected from', origin);
+    const origin =
+      socket.handshake.headers?.origin || socket.handshake.headers?.referer;
+    console.log("🔌 WS connected from", origin);
 
-         // helper para entrar na sala pessoal
+    // helper para entrar na sala pessoal
     const joinPersonal = (uid) => {
       const room = String(uid);
       socket.userId = room;
@@ -131,16 +128,15 @@ module.exports = function (io) {
       console.log(`👥 joined personal room ${room} size=${size}`);
     };
 
-        // 1) se o cookie deu certo, já entra
+    // 1) se o cookie deu certo, já entra
     if (socket.userId) {
       joinPersonal(socket.userId);
     } else {
-      console.log('⚠️ Socket sem userId (sem cookie JWT?)');
+      console.log("⚠️ Socket sem userId (sem cookie JWT?)");
     }
 
-
-       // 2) fallback: front envia o id após conectar
-    socket.on('setup', (uid) => {
+    // 2) fallback: front envia o id após conectar
+    socket.on("setup", (uid) => {
       if (!uid) return;
       const room = String(uid);
       // evita join duplicado
@@ -148,7 +144,6 @@ module.exports = function (io) {
         joinPersonal(room);
       }
     });
-
 
     // console.log(`New client connected: ${socket.id}`);
 
@@ -167,7 +162,7 @@ module.exports = function (io) {
     //   if (!userId) return;
     //   socket.join(userId); // Adiciona o socket à sala com o ID do usuário
     //   // console.log(
-    //   //   `✅ Usuário ${userId} entrou na sua sala pessoal via socket.`
+    //   //   ` Usuário ${userId} entrou na sua sala pessoal via socket.`
     //   // );
     // });
 

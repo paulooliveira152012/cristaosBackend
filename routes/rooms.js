@@ -103,7 +103,6 @@ router.get("/fetchRoomData/:roomId", async (req, res) => {
   }
 });
 
-
 // buscar os usuarios atuais na sala
 router.get("/:roomId/currentUsers", async (req, res) => {
   const { roomId } = req.params;
@@ -119,13 +118,14 @@ router.get("/:roomId/currentUsers", async (req, res) => {
       return res.status(404).json({ error: "Room not found" });
     }
 
-    return res.status(200).json({ currentUsersInRoom: room.currentUsersInRoom });
+    return res
+      .status(200)
+      .json({ currentUsersInRoom: room.currentUsersInRoom });
   } catch (err) {
     console.error("Error fetching current users:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 });
-
 
 // fetch room members:
 // GET membros da sala
@@ -170,7 +170,9 @@ router.post("/addCurrentUser", async (req, res) => {
   const { roomId, user } = req.body;
 
   if (!roomId || !user || !user._id) {
-    return res.status(400).json({ error: "Room ID and user data are required" });
+    return res
+      .status(400)
+      .json({ error: "Room ID and user data are required" });
   }
 
   try {
@@ -202,7 +204,6 @@ router.post("/addCurrentUser", async (req, res) => {
   }
 });
 
-
 // rota para remover usuarios do ativos momentaneamente
 // POST /api/rooms/removeCurrentUser
 router.post("/removeCurrentUser", async (req, res) => {
@@ -233,14 +234,15 @@ router.post("/removeCurrentUser", async (req, res) => {
   }
 });
 
-
 // 🔊 Adicionar um usuário aos oradores da sala
 router.post("/addSpeakerToRoom", async (req, res) => {
-  console.log("rota para adicionar speaker")
+  console.log("rota para adicionar speaker");
   const { roomId, user } = req.body;
 
   if (!roomId || !user || !user._id) {
-    return res.status(400).json({ error: "Room ID e dados do usuário são obrigatórios." });
+    return res
+      .status(400)
+      .json({ error: "Room ID e dados do usuário são obrigatórios." });
   }
 
   try {
@@ -267,11 +269,13 @@ router.post("/addSpeakerToRoom", async (req, res) => {
 
 // remover speaker
 router.post("/removeSpeakerFromRoom", async (req, res) => {
-  console.log("✅✅✅ rota para remover speaker")
+  console.log(" rota para remover speaker");
   const { roomId, userId } = req.body;
 
   if (!roomId || !userId) {
-    return res.status(400).json({ error: "Room ID e User ID são obrigatórios." });
+    return res
+      .status(400)
+      .json({ error: "Room ID e User ID são obrigatórios." });
   }
 
   try {
@@ -280,9 +284,8 @@ router.post("/removeSpeakerFromRoom", async (req, res) => {
       { $pull: { currentUsersSpeaking: { _id: userId } } },
       { new: true }
     );
-    
 
-    console.log(`✅ Usuario ${userId} removido dos falantes da sala ${roomId} `)
+    console.log(` Usuario ${userId} removido dos falantes da sala ${roomId} `);
 
     if (!updatedRoom) {
       return res.status(404).json({ error: "Sala não encontrada." });
@@ -297,8 +300,6 @@ router.post("/removeSpeakerFromRoom", async (req, res) => {
     return res.status(500).json({ error: "Erro ao remover orador da sala." });
   }
 });
-
-
 
 // add users to room
 router.post("/addMember", async (req, res) => {

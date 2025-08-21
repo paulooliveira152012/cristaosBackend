@@ -422,7 +422,7 @@ router.get("/current", protect, async (req, res) => {
 // User Login
 // routes/auth.js (ou onde fica seu login)
 router.post("/login", async (req, res) => {
-  console.log("✅ 1 Rota de login acessada");
+  console.log(" 1 Rota de login acessada");
   const { identifier, password } = req.body;
 
   try {
@@ -469,8 +469,8 @@ router.post("/login", async (req, res) => {
 
     res.cookie("token", token, {
       httpOnly: true,
-      sameSite: isProd ? "None" : "Lax", // ✅ prod: None | dev: Lax
-      secure: isProd, // ✅ prod: true | dev: false
+      sameSite: isProd ? "None" : "Lax", //  prod: None | dev: Lax
+      secure: isProd, //  prod: true | dev: false
       // NÃO defina "domain" em dev; em prod só se precisar compartilhar entre subdomínios.
       path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000,
@@ -479,7 +479,7 @@ router.post("/login", async (req, res) => {
     const userObject = user.toObject();
     delete userObject.password;
 
-    // ✅ Retorne o token também (útil para Authorization: Bearer)
+    //  Retorne o token também (útil para Authorization: Bearer)
     res.status(200).json({ user: userObject, token });
   } catch (error) {
     console.error("Erro no login:", error);
@@ -769,7 +769,7 @@ router.put("/update/:id", protect, async (req, res) => {
       updates.password = hashed;
     }
 
-    // ✅ Validar número de telefone, se estiver sendo atualizado
+    //  Validar número de telefone, se estiver sendo atualizado
     if (
       updates.phone !== undefined &&
       updates.phone !== null &&
@@ -869,10 +869,10 @@ router.post("/friendRequest/:friendId", protect, async (req, res) => {
   await user.save();
   await friend.save();
 
-  // ✅ Notificação com socket
+  //  Notificação com socket
   const io = req.app.get("io");
 
-  // ✅ Aqui: criar notificação
+  //  Aqui: criar notificação
   await createNotificationUtil({
     io,
     recipient: friendId,
