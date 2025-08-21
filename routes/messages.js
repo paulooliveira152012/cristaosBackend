@@ -332,35 +332,40 @@ router.post("/rejectChatRequest", protect, async (req, res) => {
     } else {
       await Notification.deleteMany({
         recipient: me,
-        type: "chat_request",
+        type: { $in: ["chat_request", "chat_reinvite"] },
         // conversationId: conv._id, // use isto se suas notificações armazenarem a conversa
       });
     }
 
     // 5) notifica o solicitante (opcional)
     const io = req.app.get("io");
-    // if (requesterId) {
-    //   await createNotificationUtil({
-    //     io,
-    //     recipient: requesterId,
-    //     fromUser: req.user._id,
-    //     type: "chat_declined",
-    //     content: `${req.user.username || "O usuário"} recusou seu convite de conversa privada.`,
-    //     conversationId: conv._id,
-    //   });
-    // }
+    const convIdStr = String(conv._id);
+
+    const payload = {
+      conversationId: convIdStr,
+      status: "declined",
+      waitingUser: null,
+      participants: conv.participants.map(String),
+      rejectedBy: me,
+      respondedAt: conv.respondedAt,
+    };
+
+    // para quem está aguardando (sala pessoal do usuário)
+    if (requesterId) {
+      io.to(String(requesterId)).emit("dm:rejected", payload);
+    }
 
     // eventos socket (se existirem helpers)
-    if (typeof emitRejected === "function") {
-      emitRejected(io, {
-        conversationId: conv._id,
-        rejectedBy: me,
-        to: requesterId,
-      });
-    }
-    if (typeof emitParticipantChanged === "function") {
-      emitParticipantChanged(req, conv);
-    }
+    // if (typeof emitRejected === "function") {
+    //   emitRejected(io, {
+    //     conversationId: conv._id,
+    //     rejectedBy: me,
+    //     to: requesterId,
+    //   });
+    // }
+    // if (typeof emitParticipantChanged === "function") {
+    //   emitParticipantChanged(req, conv);
+    // }
 
     return res
       .status(200)
