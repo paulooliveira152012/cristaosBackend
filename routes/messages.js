@@ -614,7 +614,11 @@ router.post("/reinvite", protect, async (req, res) => {
   console.log("conversationId:", conversationId);
 
   try {
-    // const io = req.app.get("io");
+    const io = req.app.get("io");
+    if (!io) {
+      console.error("Socket.io indisponível no req.app.get('io')");
+      return res.status(500).json({ error: "Socket.io indisponível" });
+    }
     const conversation = await Conversation.findById(conversationId);
 
     if (!conversation || !conversation.leavingUser) {
@@ -655,38 +659,13 @@ router.post("/reinvite", protect, async (req, res) => {
 
     // 🔔 Reutiliza o mesmo tipo de notificação
     await createNotificationUtil({
+      io, // <<<<<< ESSENCIAL
       recipient: requested,
       fromUser: requester,
       type: "chat_reinvite",
-      content: `${requesterObject.username} te convidou para uma conversa privada 4.`,
+      content: `${requesterObject.username} te convidou para uma conversa privada.`,
       conversationId,
     });
-
-    // ✅ Criar mensagem de sistema ANTES de emitir
-    // const systemMsg = await Message.create({
-    //   conversationId: conversationId,
-    //   userId: requested, // ← ESSENCIAL!
-    //   username: requestedObject.username,
-    //   profileImage: requestedObject.profileImage || "",
-    //   message: `${requestedObject.username} voltou para a conversa.`,
-    //   timestamp: new Date(),
-    //   system: true,
-    // });
-
-    // console.log("📦 Mensagem de retorno criada:", systemMsg);
-
-    // console.log("emitindo mensagem via io...");
-    // const fullSystemMsg = await Message.findById(systemMsg._id);
-
-    // console.log("🔎 Mensagem completa para emitir:", fullSystemMsg);
-
-    // conversation.participants.forEach((participantId) => {
-    //   console.log("📢 Emitindo para:", participantId.toString());
-    //   io.to(participantId.toString()).emit("newPrivateMessage", fullSystemMsg);
-    // });
-
-    // envia para todos os sockets que entraram na sala dessa conversa
-    // io.to(conversationId.toString()).emit("newPrivateMessage", fullSystemMsg);
 
     res.status(200).json({
       message: "Convite reenviado com sucesso",
