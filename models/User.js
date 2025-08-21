@@ -144,7 +144,13 @@ const userSchema = new mongoose.Schema(
     church: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Church"
+    },
+
+    bio: {
+      type: String,
+      default: "",
     }
+
   },
   { timestamps: true }
 ); // Automatically adds `createdAt` and `updatedAt` fields

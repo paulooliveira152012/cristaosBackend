@@ -1076,4 +1076,19 @@ router.post("/markMainChatAsRead", protect, async (req, res) => {
   }
 });
 
+router.post("/saveBio", protect, async (req, res) => {
+  console.log("saveBio route reached");
+
+  try {
+    const user = await User.findById(req.user._id);
+    user.bio = req.body.bio || "";
+    await user.save();
+
+    res.status(200).json({ message: "Bio salva com sucesso." });
+  } catch (error) {
+    console.error("Erro ao salvar bio:", error);
+    res.status(500).json({ message: "Erro ao salvar bio." });
+  }
+});
+
 module.exports = router;
