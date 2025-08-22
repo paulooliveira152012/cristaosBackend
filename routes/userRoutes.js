@@ -37,9 +37,13 @@ router.get("/getAllUsers", async (req, res) => {
 
   try {
     const users = await User.find({}, "_id username profileImage");
-    // console.log("response:", users);
+    console.log("response:", users);
+    // populate currentUser's friends
+    const currentUserFriends = await User.findById(req.userId).populate("friends", "_id username profileImage");
+    console.log("currentUserFriends:", currentUserFriends);
 
-    res.status(200).json({ users });
+    res.status(200).json({ users, currentUserFriends });
+
   } catch (err) {
     console.log("error:", err);
     res.status(500).json({ message: "Erro ao buscar usuarios" });
@@ -1010,9 +1014,18 @@ router.post("/removeFriend/:friendId", protect, async (req, res) => {
 // 🔹 Buscar amigos de qualquer usuário pelo ID
 router.get("/:userId/friends", async (req, res) => {
   console.log("🔹 Rota GET /:userId/friends acessada");
+  console.log("userId:", req.params.userId);
 
+  const userId = req.params.userId;
+
+  if (!userId) {
+    console.log("❌ userId não fornecido");
+    return res.status(400).json({ error: "ID de usuário não fornecido." });
+  }
+  
+  
   try {
-    const user = await User.findById(req.params.userId).populate(
+    const user = await User.findById(userId).populate(
       "friends",
       "username profileImage"
     );
@@ -1020,6 +1033,8 @@ router.get("/:userId/friends", async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: "Usuário não encontrado" });
     }
+
+    console.log("Amigos encontrados:", user.friends);
 
     return res.status(200).json({ friends: user.friends });
   } catch (error) {
