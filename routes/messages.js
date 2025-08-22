@@ -28,30 +28,13 @@ router.get("/userConversations/:userId", async (req, res) => {
 
     const conversations = await Conversation.find({
       $or: [{ participants: userId }, { waitingUser: userId }],
-    }).populate("participants", "username profileImage");
+    })
+      .populate("participants", "username profileImage")
+      .populate("leavingUser", "username profileImage")
+      .sort({ updatedAt: -1 }) // opcional: conversa mais recente primeiro
+      .lean();
 
     res.status(200).json(conversations);
-
-    // const enhancedConversations = await Promise.all(
-    //   conversations.map(async (chat) => {
-    //     const lastRead = user.lastReadTimestamps?.[chat._id] || new Date(0);
-
-    //     const unreadCount = await Message.countDocuments({
-    //       conversationId: chat._id,
-    //       timestamp: { $gt: lastRead },
-    //       sender: { $ne: userId }, //  Corrigido aqui
-    //       receiver: userId, //  Só mensagens destinadas a ele
-    //       read: false, //  Só não lidas
-    //     });
-
-    //     return {
-    //       ...chat.toObject(),
-    //       unreadCount,
-    //     };
-    //   })
-    // );
-
-    // res.status(200).json(enhancedConversations);
   } catch (err) {
     console.error("Erro ao buscar conversas:", err);
     res.status(500).json({ error: "Erro ao buscar conversas" });
