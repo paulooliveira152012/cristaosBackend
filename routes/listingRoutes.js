@@ -10,22 +10,59 @@ const User = require("../models/User");
 const createNotificationUtil = require("../utils/notificationUtils");
 // const createNotification = require("../controllers/notificationController")
 const { uploadToS3 } = require("../utils/s3Uploader"); // sua função já existente
+const { protect } = require("../utils/auth"); // middleware de autenticação
+
 
 // Get All Listings
 // Get All Listings
+// Get All Listings + Reposts no mesmo payload
 router.get("/alllistings", async (req, res) => {
-  // console.log("You've reached the backend to fetch all items!");
   try {
     const listings = await Listing.find()
-      .populate("userId", "username profileImage") // criador da postagem
-      .populate("poll.votes.userId", "username profileImage"); // quem votou
+      .populate("userId", "username profileImage")                // autor
+      .populate("poll.votes.userId", "username profileImage")     // votantes
+      .populate("shares", "username profileImage")                // QUEM repostou
+      .lean();
 
-    res.status(200).json({ listings });
+    // Monta feed: original + um item por repost
+    const feed = [];
+    for (const l of listings) {
+      // item do post original
+      feed.push({
+        type: "listing",
+        listing: l,
+        createdAt: l.createdAt,
+      });
+
+      // itens de repost (um por usuário em `shares`)
+      if (Array.isArray(l.shares) && l.shares.length) {
+        for (const reposter of l.shares) {
+          feed.push({
+            type: "repost",
+            listing: l,
+            reposter,                  // { _id, username, profileImage }
+            // ⚠️ Sem timestamp do repost no schema atual, usamos o do post
+            createdAt: l.createdAt,
+          });
+        }
+      }
+    }
+
+    // Ordena por createdAt desc (com a limitação acima)
+    feed.sort(
+      (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+    );
+
+    console.log("returning listings:", { listings, feed });
+
+    // Compatível com o front: retorna feed (novo) e listings (legado)
+    res.status(200).json({ listings, feed });
   } catch (error) {
-    console.log("error:", error);
+    console.error("Error fetching listings:", error);
     res.status(500).json({ message: "Error fetching listings", error });
   }
 });
+
 
 // Create Listing
 router.post("/create", async (req, res) => {
@@ -150,11 +187,10 @@ router.put("/edit/:id", async (req, res) => {
 
 // Get Listings by User
 // Get Listings by User
+// GET /api/listings/users/:userId
 router.get("/users/:userId", async (req, res) => {
   console.log("user's listings route hit!");
   const { userId } = req.params;
-
-  console.log("user:", userId);
 
   try {
     const user = await User.findById(userId)
@@ -163,18 +199,46 @@ router.get("/users/:userId", async (req, res) => {
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    const listings = await Listing.find({ userId })
+    // 👉 Busca TANTO as postagens de autoria quanto as postagens que este user compartilhou
+    const items = await Listing.find({
+      $or: [{ userId }, { shares: userId }],
+    })
       .populate("userId", "username profileImage")
       .populate("poll.votes.userId", "profileImage username")
       .lean();
 
-    res.status(200).json({ user, listings });
+    // remove duplicatas (se acontecer) e marca o que é “compartilhado neste perfil”
+    const seen = new Set();
+    const listings = items
+      .filter((l) => {
+        const k = String(l._id);
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      })
+      .map((l) => ({
+        ...l,
+        // shared se NÃO é autor + consta em shares deste perfil
+        __sharedByProfile:
+          String(l.userId?._id ?? l.userId) !== String(userId) &&
+          Array.isArray(l.shares) &&
+          l.shares.some((u) => String(u) === String(userId)),
+      }))
+      // ordene como preferir; se não usa timestamps, ordene por createdAt desc
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+      );
+
+    return res.status(200).json({ user, listings });
   } catch (error) {
-    res
+    console.error(error);
+    return res
       .status(500)
       .json({ message: "Error fetching user info and listings", error });
   }
 });
+
 
 // Get Listing by ID
 router.get("/listings/:id", async (req, res) => {
@@ -327,45 +391,75 @@ router.put(
 );
 
 // Share (Repost) Listing
-router.post("/share/:listingId", async (req, res) => {
-  console.log("Voce acessou a rota de compartilhamento");
-
-  const { listingId } = req.params;
-  const { userId } = req.body;
-
-  console.log("The listing ID is:", listingId);
-  console.log("The user ID is:", userId);
-
+// Compartilhar (repost) — SEM criar cópia
+// Compartilhar (repost) — SEM criar cópia
+router.post("/share/:listingId", protect, async (req, res) => {
+  console.log("reposting a shared listing...")
   try {
-    // Find the original listing by ID
-    const listing = await Listing.findById(listingId);
-    if (!listing) {
-      return res.status(404).json({ message: "Listing not found" });
+    const { listingId } = req.params;
+    const userId = req.user._id; // vem do middleware protect
+
+    const result = await Listing.updateOne(
+      { _id: listingId, shares: { $ne: userId } },     // só se ainda não compartilhou
+      { $addToSet: { shares: userId }, $inc: { sharesCount: 1 } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "Listing não encontrado." });
+    }
+    if (result.modifiedCount === 0) {
+      return res.status(200).json({ message: "Já compartilhado anteriormente." });
     }
 
-    // Convert the listing to a plain JS object and remove the _id field
-    const listingData = listing.toObject();
-    delete listingData._id; // Remove the original _id to avoid duplicate key error
+    // (opcional) notificação para o autor
+    try {
+      const listing = await Listing.findById(listingId).select("userId");
+      if (listing && String(listing.userId) !== String(userId)) {
+        const io = req.app.get("io");
+        await createNotificationUtil({
+          io,
+          recipient: listing.userId,
+          fromUser: userId,
+          type: "share",
+          content: "compartilhou seu post",
+          listingId,
+        });
+      }
+    } catch {}
 
-    // Create a new listing with the current user's ID and current date
-    const newListing = new Listing({
-      ...listingData,
-      userId, // The user reposting the listing
-      createdAt: new Date(), // Set the repost date as the new creation date
-    });
-
-    // Save the reposted listing
-    await newListing.save();
-
-    // Return success response with the new listing data
-    res
-      .status(201)
-      .json({ message: "Listing reposted successfully", newListing });
-  } catch (error) {
-    console.error("Error reposting listing:", error);
-    res.status(500).json({ message: "Error reposting listing", error });
+    return res.status(200).json({ message: "Compartilhado com sucesso." });
+  } catch (err) {
+    console.error("Erro ao compartilhar:", err);
+    return res.status(500).json({ message: "Erro ao compartilhar." });
   }
 });
+
+// Remover compartilhamento
+router.delete("/share/:listingId", protect, async (req, res) => {
+  console.log("deleting shared listing")
+  try {
+    const { listingId } = req.params;
+    const userId = req.user._id;
+
+    const result = await Listing.updateOne(
+      { _id: listingId, shares: userId },
+      { $pull: { shares: userId }, $inc: { sharesCount: -1 } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "Listing não encontrado." });
+    }
+    if (result.modifiedCount === 0) {
+      return res.status(200).json({ message: "Nada para desfazer." });
+    }
+
+    return res.status(200).json({ message: "Compartilhamento removido." });
+  } catch (err) {
+    console.error("Erro no unshare:", err);
+    return res.status(500).json({ message: "Erro ao remover compartilhamento." });
+  }
+});
+
 
 // Delete Listing
 router.delete("/delete/:listingId", async (req, res) => {
