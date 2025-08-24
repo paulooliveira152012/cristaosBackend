@@ -4,6 +4,23 @@ const Listing = require("../models/Listing"); // modelo do MongoDB
 const Add = require("../models/Add"); // modelo do MongoDB para Add
 const { verifyToken, verifyLeader } = require("../utils/auth"); // middlewares de autenticação/autorização
 
+// Rota para listar todas as postagens (acesso de líder)
+router.get("/admFetchAds", async (req, res) => {
+  console.log(" 🟢 🟢 🟢 GET ADM ROUTE REACHED")
+  try {
+    const adds = await Add.find().populate("createdBy", "username");
+    // console.log("Fetched adds:", adds);
+    if (!adds || adds.length === 0) {
+      return res.status(404).json({ message: "Nenhuma postagem encontrada." });
+    }
+    // console.log("Fetched adds:", adds);
+    res.status(200).json(adds);
+  } catch (error) {
+    console.error("Erro ao buscar postagens:", error);
+    res.status(500).json({ message: "Erro interno ao buscar postagens." });
+  }
+});
+
 // Rota para deletar uma postagem (acesso de líder)
 router.delete("/admDeleteListing/:listingId", async (req, res) => {
     console.log("DELETE ADM ROUTE REACHED")
@@ -24,9 +41,6 @@ router.delete("/admDeleteListing/:listingId", async (req, res) => {
   }
 });
 
-router.get("adm", () => {
-  console.log("test")
-})
 
 // Rota para adicionar um novo Add (acesso de líder)
 router.post("/admListAdd", verifyToken, verifyLeader, async (req, res) => {
@@ -78,22 +92,6 @@ router.put("/admEditAd/:addId", verifyToken, verifyLeader, async (req, res) => {
   }
 });
 
-// Rota para listar todas as postagens (acesso de líder)
-router.get("/admFetchAds", async (req, res) => {
-  // console.log(" 🟢 🟢 🟢 GET ADM ROUTE REACHED")
-  try {
-    const adds = await Add.find().populate("createdBy", "username");
-    // console.log("Fetched adds:", adds);
-    if (!adds || adds.length === 0) {
-      return res.status(404).json({ message: "Nenhuma postagem encontrada." });
-    }
-    // console.log("Fetched adds:", adds);
-    res.status(200).json(adds);
-  } catch (error) {
-    console.error("Erro ao buscar postagens:", error);
-    res.status(500).json({ message: "Erro interno ao buscar postagens." });
-  }
-});
 
 // Rota para buscar uma postagem específica (acesso de líder)
 router.get("/admFetchAd/:addId", verifyToken, verifyLeader, async (req, res) => {

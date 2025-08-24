@@ -2,6 +2,7 @@
 const express = require("express");
 const router = express.Router();
 const Room = require("../models/Room"); // Import the Room model
+const { protect } = require("../utils/auth")
 
 // POST /api/rooms - Create a new room
 router.post("/create", async (req, res) => {
@@ -374,3 +375,24 @@ router.post("/removeMember", async (req, res) => {
 });
 
 module.exports = router;
+
+
+// routes/liveRooms.js
+router.put("/:roomId/image", protect, async (req, res) => {
+  const { roomId } = req.params;
+  const { imageUrl } = req.body;
+  if (!imageUrl) return res.status(400).json({ message: "imageUrl é obrigatório" });
+
+  const room = await Room.findByIdAndUpdate(
+    roomId,
+    { imageUrl },
+    { new: true }
+  ).lean();
+
+  if (!room) return res.status(404).json({ message: "Sala não encontrada" });
+
+  // opcional: emitir pelo socket para quem está na sala
+  req.app.get("io")?.to(String(roomId)).emit("room:updated", { room });
+
+  res.json({ room });
+});

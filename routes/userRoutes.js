@@ -415,6 +415,7 @@ router.get("/users/:id", protect, async (req, res) => {
 
 // /routes/userRoutes.js
 router.get("/current", protect, async (req, res) => {
+  console.log("Rota para obter usuário atual");
   if (!req.user) {
     console.log("usuario nao autenticado");
     return res.status(401).json({ message: "Não autenticado" });

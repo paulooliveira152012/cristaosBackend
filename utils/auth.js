@@ -13,6 +13,7 @@ const getTokenFromReq = (req) => {
 
 //  protege rotas privadas (aceita Bearer e/ou cookie)
 const protect = async (req, res, next) => {
+  console.log("tentando verificar usuario...")
   try {
     const token = getTokenFromReq(req);
 
@@ -32,6 +33,8 @@ const protect = async (req, res, next) => {
           sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
         });
       }
+
+      console.log("usuario verificado!")
       return res
         .status(401)
         .json({ error: "Conta não encontrada. Faça login novamente." });
@@ -40,6 +43,7 @@ const protect = async (req, res, next) => {
     req.user = user;
     next();
   } catch (err) {
+    console.log("Nao foi possivel verificar usuario...", err)
     if (req.cookies?.token) {
       res.clearCookie("token", {
         httpOnly: true,

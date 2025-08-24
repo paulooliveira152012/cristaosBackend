@@ -1,3 +1,4 @@
+// index.js
 const express = require('express');
 const userRoutes = require('./userRoutes');
 const listingRoutes = require('./listingRoutes');
@@ -15,6 +16,7 @@ const churchRoutes = require('./churchRoutes')
 const interMeetingRoutes = require('./interMeetingsRoutes')
 const muralRoutes = require('./muralRoutes')
 const presence = require('./presence')
+const privateRoom = require('./privateRoomsRoutes')
 
 
 const router = express.Router();
@@ -35,6 +37,7 @@ router.use("/church", churchRoutes)
 router.use("/intermeeting", interMeetingRoutes)
 router.use("/mural", muralRoutes)
 router.use("/presence", presence)
+router.use("/privateRooms", privateRoom)
 
 module.exports = router;
 
