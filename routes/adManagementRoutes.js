@@ -2,10 +2,23 @@ const express = require("express");
 const multer = require("multer");
 const { uploadToS3 } = require("../utils/s3Uploader");
 const Add = require("../models/Add");
+const AdSubmission = require("../models/AdSubmission")
 const fs = require("fs");
 
 const router = express.Router();
 const upload = multer({ dest: "uploads/" });
+
+// ⚙️ se você já tem middleware de auth e quer requerer login:
+const { protect } = require("../utils/auth"); // opcional
+
+// ⚙️ util opcional de upload para S3 (substitua pelo seu)
+const { uploadBufferToS3 } = require("../utils/s3Uploader"); 
+
+function parseDateOrNull(v) {
+  if (!v) return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
 
 
 
@@ -155,5 +168,85 @@ router.get("/view", async (req, res) => {
     res.status(500).json({ message: "Erro ao listar anúncios", error });
   }
 });
+
+
+// POST /api/ads/submit
+router.post(
+  "/submit",
+  // protect, // 👉 descomente se quiser obrigar login
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      const {
+        name, email, phone, company,
+        title, description, link,
+        category, location, interests,
+        planId, placements,
+        startDate, endDate,
+      } = req.body;
+
+      // validações mínimas
+      const errors = [];
+      if (!name) {
+        console.log("missing name")
+        return
+      }
+
+      // datas
+      const start = parseDateOrNull(startDate);
+      const end = parseDateOrNull(endDate);
+      if (!start) errors.push("Data de início inválida.");
+      if (end && start && end < start) errors.push("Data de fim não pode ser antes do início.");
+
+      if (errors.length) {
+        return res.status(400).json({ error: errors.join(" ") });
+      }
+
+      // placements vem como string JSON (do front). Faça parse com fallback seguro
+      let placementsArr = [];
+      try {
+        placementsArr = placements ? JSON.parse(placements) : [];
+        if (!Array.isArray(placementsArr)) placementsArr = [];
+      } catch {
+        placementsArr = [];
+      }
+
+      // upload da imagem (opcional)
+      let imageUrl = "";
+      if (req.file) {
+        // gere um nome/slug se quiser
+        const key = `ads/${Date.now()}_${req.file.originalname.replace(/\s+/g, "_")}`;
+        imageUrl = await uploadBufferToS3(req.file.buffer, req.file.mimetype, key);
+      }
+
+      const payload = {
+        name,
+        email,
+        phone,
+        company,
+        title,
+        description,
+        link,
+        category,
+        location,
+        interests,
+        planId,
+        placements: placementsArr,
+        startDate: start,
+        endDate: end || null,
+        imageUrl,
+        // createdBy: req.user?._id, // se estiver usando protect
+        status: "pending",
+      };
+
+      const doc = await AdSubmission.create(payload);
+      return res.status(201).json({ message: "Anúncio enviado com sucesso.", ad: doc });
+    } catch (err) {
+      console.error("Erro ao submeter anúncio:", err);
+      const msg = err?.message?.includes("Formato de imagem") ? err.message : "Erro interno.";
+      return res.status(500).json({ error: msg });
+    }
+  }
+);
 
 module.exports = router;

@@ -39,11 +39,13 @@ router.get("/getAllUsers", async (req, res) => {
     const users = await User.find({}, "_id username profileImage");
     console.log("response:", users);
     // populate currentUser's friends
-    const currentUserFriends = await User.findById(req.userId).populate("friends", "_id username profileImage");
+    const currentUserFriends = await User.findById(req.userId).populate(
+      "friends",
+      "_id username profileImage"
+    );
     console.log("currentUserFriends:", currentUserFriends);
 
     res.status(200).json({ users, currentUserFriends });
-
   } catch (err) {
     console.log("error:", err);
     res.status(500).json({ message: "Erro ao buscar usuarios" });
@@ -707,13 +709,20 @@ router.put("/resetPassword", async (req, res) => {
 router.put("/update/:id", protect, async (req, res) => {
   console.log("rota para atualizar alcançada...");
 
+  const { id } = req.params; // <-- pegue o id primeiro
+  const authId = String(req.user?._id || req.user?.id || "");
+
+    if (!authId) {
+    return res.status(401).json({ error: "Não autenticado." });
+  }
+
+
   if (String(req.user._id) !== String(id)) {
     return res
       .status(403)
       .json({ error: "Sem permissão para atualizar este usuário." });
   }
 
-  const { id } = req.params;
   const { currentPassword, newPassword, confirmPassword, email, ...updates } =
     req.body;
 
@@ -1023,8 +1032,7 @@ router.get("/:userId/friends", async (req, res) => {
     console.log("❌ userId não fornecido");
     return res.status(400).json({ error: "ID de usuário não fornecido." });
   }
-  
-  
+
   try {
     const user = await User.findById(userId).populate(
       "friends",
