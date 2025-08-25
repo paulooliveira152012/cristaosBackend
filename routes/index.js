@@ -17,6 +17,7 @@ const interMeetingRoutes = require('./interMeetingsRoutes')
 const muralRoutes = require('./muralRoutes')
 const presence = require('./presence')
 const privateRoom = require('./privateRoomsRoutes')
+const profile = require('./profileUpdateRoutes')
 
 
 const router = express.Router();
@@ -38,6 +39,7 @@ router.use("/intermeeting", interMeetingRoutes)
 router.use("/mural", muralRoutes)
 router.use("/presence", presence)
 router.use("/privateRooms", privateRoom)
+router.use("/profile", profile)
 
 module.exports = router;
 

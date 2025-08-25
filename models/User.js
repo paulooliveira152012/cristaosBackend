@@ -149,6 +149,11 @@ const userSchema = new mongoose.Schema(
     bio: {
       type: String,
       default: "",
+    },
+
+    profileCoverImage: {
+      type: String,
+      default: "",
     }
 
   },
