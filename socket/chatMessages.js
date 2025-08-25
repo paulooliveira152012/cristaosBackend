@@ -86,35 +86,42 @@ const handleSendMessage = async ({ io, socket, userId, payload }) => {
 
 
 // Handle message deletion for a specific room
-const handleDeleteMessage = async (socket, messageId, userId, roomId) => {
+const handleDeleteMessage = async ({ io, socket, userId, messageId }) => {
   try {
-    const message = await Message.findById(messageId);
+    if (!socket?.emit) return;
+    if (!messageId) return socket.emit("errorMessage", "Missing messageId");
+    if (!userId)   return socket.emit("errorMessage", "Not authenticated");
 
-    if (!message) {
-      console.error(`Message with ID ${messageId} not found`);
-      socket.emit('errorMessage', 'Message not found');
-      return;
+    // Só apaga se a mensagem pertence ao usuário
+    const doc = await Message.findOneAndDelete({
+      _id: String(messageId),
+      userId: String(userId),
+    });
+
+    if (!doc) {
+      return socket.emit(
+        "errorMessage",
+        "Message not found or not owned by you"
+      );
     }
 
-    // Ensure the user is authorized to delete the message
-    if (message.userId.toString() !== userId.toString()) {
-      console.error(`User ${userId} is not authorized to delete message ${messageId}`);
-      socket.emit('errorMessage', 'You are not authorized to delete this message');
-      return;
+    const roomId = doc.roomId ? String(doc.roomId) : null;
+    const convId = doc.conversationId ? String(doc.conversationId) : null;
+
+    if (roomId) {
+      io.to(roomId).emit("messageDeleted", { messageId: String(messageId) });
+    } else if (convId) {
+      io.to(convId).emit("messageDeleted", { messageId: String(messageId) });
+    } else {
+      // fallback: confirma só para quem deletou
+      socket.emit("messageDeleted", { messageId: String(messageId) });
     }
-
-    // Delete the message if authorized
-    await Message.deleteOne({ _id: messageId });
-    console.log(`Message ${messageId} deleted by user ${userId}`);
-
-    // Notify all clients in the room, including the one who deleted the message
-    socket.to(roomId).emit('messageDeleted', messageId); // Notify others in the room
-    socket.emit('messageDeleted', messageId); // Confirm deletion to the user who deleted the message
-  } catch (error) {
-    console.error(`Error deleting message in room ${roomId}:`, error.message);
-    socket.emit('errorMessage', 'Failed to delete message');
+  } catch (err) {
+    console.error("❌ erro em handleDeleteMessage:", err);
+    socket?.emit?.("errorMessage", "Failed to delete message");
   }
-};
+}
+
 
 // Emit chat history for users when they minimize the room
 const emitChatHistoryWhenMinimized = async (socket, roomId) => {

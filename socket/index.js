@@ -27,6 +27,7 @@ const {
 
 const User = require("../models/User");
 const Conversation = require("../models/Conversation");
+const Message = require("../models/Message");
 
 /* ===========================
  * Auth helpers
@@ -225,11 +226,17 @@ module.exports = function initSocket(io) {
     socket.on(
       "deleteMessage",
       requireAuth(socket, "deleteMessage", async (payload = {}) => {
+        const messageId = payload?.messageId ? String(payload.messageId) : null;
+
+        if (!messageId) {
+          return socket.emit("errorMessage", "Missing messageId");
+        }
+
         await handleDeleteMessage({
           io,
           socket,
-          userId: socket.data.userId,
-          payload,
+          userId: socket.data.userId, // do token
+          messageId,
         });
       })
     );
