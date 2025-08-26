@@ -58,33 +58,39 @@ router.get("/", async (req, res) => {
 });
 
 // Route to update room title
+// Route to update room (title and/or image URL)
 router.put("/update/:roomId", async (req, res) => {
-  console.log("backend route reached");
+  console.log("backend route update room reached");
   const { roomId } = req.params;
-  const { newTitle } = req.body;
+  const { newTitle, coverUrl } = req.body;
 
-  if (!roomId || !newTitle) {
-    return res.send("no room Id or New title received");
+  console.log("newTitle:", newTitle, "coverUrl:", coverUrl);
+
+  if (!roomId) {
+    return res.status(400).json({ error: "roomId ausente" });
   }
 
-  console.log("The roomId is", roomId);
-  console.log("The new room title is", newTitle);
+  // Monte somente o que veio
+  const updates = {};
+  if (newTitle) updates.roomTitle = newTitle;
+  if (coverUrl) updates.roomImage = coverUrl; // <- garanta que o campo no schema é 'coverUrl'
 
-  console.log("Updating room title...");
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: "Nada para atualizar" });
+  }
+
   try {
-    const room = await Room.findByIdAndUpdate(
-      roomId,
-      { roomTitle: newTitle },
-      { new: true }
-    );
-    if (!room) {
-      return res.status(404).json({ error: "Room not found" });
-    }
-    res.json({ message: "Room title updated", room });
+    const room = await Room.findByIdAndUpdate(roomId, updates, { new: true });
+    if (!room) return res.status(404).json({ error: "Room not found" });
+
+    console.log("updated...");
+    return res.json({ message: "Room atualizado", room });
   } catch (error) {
-    res.status(500).json({ error: "Failed to update room title" });
+    console.error(error);
+    return res.status(500).json({ error: "Failed to update room" });
   }
 });
+
 
 // fetch room data
 router.get("/fetchRoomData/:roomId", async (req, res) => {
