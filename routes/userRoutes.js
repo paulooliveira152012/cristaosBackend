@@ -470,16 +470,14 @@ router.get("/current", protect, async (req, res) => {
 
 // User Login
 // User Login
-// routes/auth.js (ou onde fica seu login)
+// routes/auth.js
 router.post("/login", async (req, res) => {
-  console.log(" 1 Rota de login acessada");
-  const { identifier, password } = req.body;
+  console.log("1) Rota de login acessada");
+  const { identifier, password, acceptTerms, rememberMe } = req.body;
 
   try {
     if (!identifier || !password) {
-      return res
-        .status(400)
-        .json({ message: "Todos os campos são necessários" });
+      return res.status(400).json({ message: "Todos os campos são necessários" });
     }
 
     const isEmail = identifier.includes("@");
@@ -488,13 +486,14 @@ router.post("/login", async (req, res) => {
       : { phone: Number(identifier) };
 
     const user = await User.findOne(query);
-    if (!user)
+    if (!user) {
       return res.status(400).json({ message: "Credenciais inválidas" });
-    if (!user.isVerified) {
-      return res
-        .status(403)
-        .json({ message: "Verifique sua conta antes de fazer login." });
     }
+
+    if (!user.isVerified) {
+      return res.status(403).json({ message: "Verifique sua conta antes de fazer login." });
+    }
+
     if (!user.password) {
       return res.status(403).json({
         message:
@@ -503,39 +502,67 @@ router.post("/login", async (req, res) => {
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch)
+    if (!isMatch) {
       return res.status(400).json({ message: "Credenciais inválidas" });
+    }
 
-    // JWT
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-    console.log("token JWT gerado:", token);
+    // --- Checagem de termos (inclui versão) ---
+    const requiredVersion = String(process.env.TERMS_VERSION || "1");
+    const hasAccepted = !!user.hasAcceptedTerms;
+    const currentVersion = user.termsVersion ? String(user.termsVersion) : null;
+    const mustAccept = !hasAccepted || currentVersion !== requiredVersion;
 
-    // ⚙️ Opções do cookie: dev (HTTP) vs prod (HTTPS)
+    // normaliza acceptTerms: true | "true" | 1 | "1"
+    const acceptFlag =
+      acceptTerms === true ||
+      acceptTerms === "true" ||
+      acceptTerms === 1 ||
+      acceptTerms === "1";
+
+    if (mustAccept) {
+      if (acceptFlag) {
+        user.hasAcceptedTerms = true;
+        user.termsVersion = requiredVersion;
+        user.hasAcceptedTermsAt = new Date();
+        await user.save();
+      } else {
+        // NÃO autenticar e NÃO setar cookie ainda
+        return res.status(428).json({
+          code: "TERMS_REQUIRED",
+          message: "Você precisa aceitar os Termos e a Privacidade para continuar.",
+          accepted: hasAccepted,
+          currentVersion,
+          requiredVersion,
+        });
+      }
+    }
+
+    // --- JWT + Cookie só depois de tudo OK ---
+    const expiresIn = rememberMe ? "30d" : "7d";
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn });
+
     const isProd =
       process.env.NODE_ENV === "production" ||
-      process.env.FORCE_SECURE_COOKIE === "1"; // opcional: força em sandbox
+      process.env.FORCE_SECURE_COOKIE === "1";
 
     res.cookie("token", token, {
       httpOnly: true,
-      sameSite: isProd ? "None" : "Lax", //  prod: None | dev: Lax
-      secure: isProd, //  prod: true | dev: false
-      // NÃO defina "domain" em dev; em prod só se precisar compartilhar entre subdomínios.
+      sameSite: isProd ? "None" : "Lax",
+      secure: isProd,
       path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: (rememberMe ? 30 : 7) * 24 * 60 * 60 * 1000,
     });
 
     const userObject = user.toObject();
     delete userObject.password;
 
-    //  Retorne o token também (útil para Authorization: Bearer)
-    res.status(200).json({ user: userObject, token });
+    return res.status(200).json({ user: userObject, token });
   } catch (error) {
     console.error("Erro no login:", error);
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 });
+
 
 // debug route for cookies set up
 router.get("/debug/cookies", (req, res) => {
