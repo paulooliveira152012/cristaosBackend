@@ -1,4 +1,19 @@
 const nodemailer = require('nodemailer');
+// emailService.js (TOPO DO ARQUIVO)
+const path = require('path');
+try {
+  require('dotenv-flow').config({ path: path.resolve(__dirname, '..') });
+} catch {}
+
+const API_URL =
+  process.env.FRONTEND_URL || // ideal: usar um único nome por ambiente
+  (process.env.NODE_ENV === "production"
+    ? process.env.FRONTEND_URL_PROD
+    : process.env.FRONTEND_URL_DEV) ||
+  process.env.FRONTEND_URL_DEV_NET || // sua LAN, se tiver
+  "http://localhost:3000";
+
+console.log("[emailService] FRONTEND_URL efetiva:", API_URL);
 
 // Create reusable transporter object using Gmail SMTP
 const transporter = nodemailer.createTransport({
@@ -63,20 +78,46 @@ const sendEmailUpdateVerification = async (email, verificationLink) => {
   }
 };
 
+function buildNotificationEmail({ username, path = "/notifications" } = {}) {
+  const url = `${API_URL}${path}`;
+  console.log("url:", url)
+  const subject = "Você tem uma nova notificação";
+  const text = `Olá ${username || ""}, você recebeu uma nova notificação. Veja em: ${url}`;
+
+  const html = `
+<!doctype html>
+<html>
+  <body style="margin:0;padding:24px;font-family:Arial,Helvetica,sans-serif;background:#f6f7f9;color:#111">
+    <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:10px;padding:24px;border:1px solid #eee">
+      <h2 style="margin:0 0 12px 0;">Você tem uma nova notificação</h2>
+      <p style="margin:0 0 20px 0;">Olá ${username || ""}, clique no botão abaixo para ver:</p>
+      <p style="text-align:center;margin:24px 0;">
+        <a href="${url}" 
+           style="background:#111;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px;display:inline-block;">
+          Ver notificações
+        </a>
+      </p>
+      <p style="font-size:12px;color:#555;margin-top:24px">
+        Se o botão não funcionar, copie e cole este link no navegador:<br>
+        <a href="${url}" style="color:#111">${url}</a>
+      </p>
+    </div>
+  </body>
+</html>`.trim();
+
+  return { subject, text, html, url };
+}
+
+// services/emailService.js
 // services/emailService.js
 const sendNotificationEmail = async (email, opts = {}) => {
-  const {
-    subject = "Notificação",
-    text = "Você recebeu uma nova notificação",
-    html, // opcional
-  } = opts;
-
+  const { subject, text, html } = buildNotificationEmail(opts);
   const mailOptions = {
     from: '"Cristãos App" <cristaosapp@gmail.com>',
     to: email,
     subject,
-    text,
-    ...(html ? { html } : {}),
+    text, // fallback
+    html, // versão rica
   };
 
   try {
@@ -84,8 +125,6 @@ const sendNotificationEmail = async (email, opts = {}) => {
     console.log(`Email de notificação enviado para ${email}`);
   } catch (error) {
     console.error("Erro ao enviar email de notificação:", error.message);
-    // não lance erro aqui se não quiser quebrar o fluxo
-    // throw new Error('Erro ao enviar email de notificação.');
   }
 };
 
