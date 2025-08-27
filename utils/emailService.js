@@ -63,9 +63,37 @@ const sendEmailUpdateVerification = async (email, verificationLink) => {
   }
 };
 
+// services/emailService.js
+const sendNotificationEmail = async (email, opts = {}) => {
+  const {
+    subject = "Notificação",
+    text = "Você recebeu uma nova notificação",
+    html, // opcional
+  } = opts;
+
+  const mailOptions = {
+    from: '"Cristãos App" <cristaosapp@gmail.com>',
+    to: email,
+    subject,
+    text,
+    ...(html ? { html } : {}),
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Email de notificação enviado para ${email}`);
+  } catch (error) {
+    console.error("Erro ao enviar email de notificação:", error.message);
+    // não lance erro aqui se não quiser quebrar o fluxo
+    // throw new Error('Erro ao enviar email de notificação.');
+  }
+};
+
+
 
 module.exports = {
   sendResetLink,
   sendVerificationLink, // Export the new function
-  sendEmailUpdateVerification
+  sendEmailUpdateVerification,
+  sendNotificationEmail
 };

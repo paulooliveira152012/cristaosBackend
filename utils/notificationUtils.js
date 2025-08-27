@@ -1,10 +1,39 @@
 // utils/notificationUtils.js
 const Notification = require("../models/Notification");
+const User = require("../models/User");
+const { sendNotificationEmail } = require("../utils/emailService"); // ajuste o caminho se necessário
+
+function buildEmailContent({ type, content, target, listingId, commentId, conversationId }) {
+  // Customize por tipo se quiser
+  switch (type) {
+    case "comment":
+      return {
+        subject: "Novo comentário na sua publicação",
+        text:
+          `Olá ${target?.username || ""}, você recebeu um novo comentário.` +
+          (content?.text ? `\n\n"${content.text}"` : ""),
+      };
+    case "message":
+      return {
+        subject: "Você recebeu uma nova mensagem",
+        text:
+          `Olá ${target?.username || ""}, você recebeu uma nova mensagem.` +
+          (content?.text ? `\n\n"${content.text}"` : ""),
+      };
+    default:
+      return {
+        subject: "Você recebeu uma nova notificação",
+        text:
+          `Olá ${target?.username || ""}, você recebeu uma nova notificação.` +
+          (content?.text ? `\n\n"${content.text}"` : ""),
+      };
+  }
+}
 
 const createNotificationUtil = async ({
-  io, // precisa receber o io do server (req.app.get('io'))
-  recipient,
-  fromUser,
+  io,               // socket.io (opcional)
+  recipient,        // ObjectId (string) do usuário alvo
+  fromUser,         // ObjectId (string) do autor
   type,
   content,
   listingId,
@@ -12,16 +41,11 @@ const createNotificationUtil = async ({
   conversationId = null,
 }) => {
   try {
-    // não notifica a si mesmo
+    // 0) não notifica a si mesmo
     if (String(recipient) === String(fromUser)) return;
+
     console.log("Criando notificação:", {
-      recipient,
-      fromUser,
-      type,
-      content,
-      listingId,
-      commentId,
-      conversationId,
+      recipient, fromUser, type, content, listingId, commentId, conversationId,
     });
 
     // 1) cria e salva
@@ -38,7 +62,7 @@ const createNotificationUtil = async ({
     // 2) popula o mínimo que o front usa
     const populated = await doc.populate("fromUser", "username profileImage");
 
-    // 3) payload “plano” (sem aninhar em { notification: ... })
+    // 3) payload “plano”
     const payload = {
       _id: String(populated._id),
       type: populated.type,
@@ -47,9 +71,7 @@ const createNotificationUtil = async ({
       recipient: String(populated.recipient),
       listingId: populated.listingId ? String(populated.listingId) : undefined,
       commentId: populated.commentId ? String(populated.commentId) : undefined,
-      conversationId: populated.conversationId
-        ? String(populated.conversationId)
-        : undefined,
+      conversationId: populated.conversationId ? String(populated.conversationId) : undefined,
       fromUser: populated.fromUser
         ? {
             _id: String(populated.fromUser._id),
@@ -60,13 +82,38 @@ const createNotificationUtil = async ({
       createdAt: populated.createdAt,
     };
 
-    // 4) emite para a sala pessoal do destinatário
+    // 4) emite via socket (se io disponível)
     if (io) {
       io.to(String(recipient)).emit("newNotification", payload);
       console.log("🔔 [socket] newNotification ->", String(recipient));
     } else {
       console.warn("⚠️ io indisponível; não foi possível emitir a notificação.");
     }
+
+    // 5) envia e-mail em background (não bloqueia)
+    (async () => {
+      try {
+        const target = await User.findById(recipient)
+          .select("email notificationsByEmail username");
+        if (!target) {
+          console.warn("[notif-email] recipient não encontrado:", recipient);
+          return;
+        }
+        if (!target.notificationsByEmail) {
+          console.log("[notif-email] opt-out:", target.email);
+          return;
+        }
+
+        const { subject, text } = buildEmailContent({
+          type, content, target, listingId, commentId, conversationId,
+        });
+
+        await sendNotificationEmail(target.email, { subject, text });
+        console.log(`[notif-email] enviado para ${target.email}`);
+      } catch (e) {
+        console.error("[notif-email] falha ao enviar:", e.message);
+      }
+    })();
 
     return populated;
   } catch (error) {
