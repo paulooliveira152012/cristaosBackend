@@ -471,6 +471,7 @@ router.get("/current", protect, async (req, res) => {
 // User Login
 // User Login
 // routes/auth.js
+// POST /login
 router.post("/login", async (req, res) => {
   console.log("1) Rota de login acessada");
   const { identifier, password, acceptTerms, rememberMe } = req.body;
@@ -486,9 +487,7 @@ router.post("/login", async (req, res) => {
       : { phone: Number(identifier) };
 
     const user = await User.findOne(query);
-    if (!user) {
-      return res.status(400).json({ message: "Credenciais inválidas" });
-    }
+    if (!user) return res.status(400).json({ message: "Credenciais inválidas" });
 
     if (!user.isVerified) {
       return res.status(403).json({ message: "Verifique sua conta antes de fazer login." });
@@ -502,9 +501,7 @@ router.post("/login", async (req, res) => {
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Credenciais inválidas" });
-    }
+    if (!isMatch) return res.status(400).json({ message: "Credenciais inválidas" });
 
     // --- Checagem de termos (inclui versão) ---
     const requiredVersion = String(process.env.TERMS_VERSION || "1");
@@ -537,9 +534,9 @@ router.post("/login", async (req, res) => {
       }
     }
 
-    // --- JWT + Cookie só depois de tudo OK ---
+    // --- JWT + Cookie (com session version) ---
     const expiresIn = rememberMe ? "30d" : "7d";
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn });
+    const token = createJwtForUser(user._id, expiresIn); // <-- usa sv
 
     const isProd =
       process.env.NODE_ENV === "production" ||
@@ -547,7 +544,7 @@ router.post("/login", async (req, res) => {
 
     res.cookie("token", token, {
       httpOnly: true,
-      sameSite: isProd ? "None" : "Lax",
+      sameSite: isProd ? "None" : "Lax",  // em Express, "None" ou "none" funcionam; mantenha consistente
       secure: isProd,
       path: "/",
       maxAge: (rememberMe ? 30 : 7) * 24 * 60 * 60 * 1000,
