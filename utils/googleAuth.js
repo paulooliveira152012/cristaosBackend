@@ -38,40 +38,70 @@ async function verifyGoogleToken(idToken) {
   return ticket.getPayload(); // retorna o payload inteiro
 }
 
-async function findOrCreateUserFromGooglePayload(payload) {
-  // tenta por email ou googleId
+// services/authGoogle.js (exemplo)
+async function findOrCreateUserFromGooglePayload(
+  payload,
+  { acceptTerms = false, requiredVersion = String(process.env.TERMS_VERSION || "1") } = {}
+) {
+  const email = (payload.email || "").toLowerCase();
+  if (!email) throw new Error("Google payload sem e-mail verificado");
+
+  // tenta achar por email OU googleId
   let user = await User.findOne({
-    $or: [{ email: payload.email }, { googleId: payload.sub }],
+    $or: [{ email }, { googleId: payload.sub }],
   });
 
   const { firstName, lastName } = splitNames(payload);
+  let created = false;
+  let changed = false;
 
   if (!user) {
+    // criar username único
     const username = await uniqueUsername(firstName);
+
     user = new User({
       firstName,
       lastName,
       username,
-      email: payload.email.toLowerCase(),
+      email,
       googleId: payload.sub,
-      isVerified: true,
+      isVerified: true,              // email do Google é verificado
       profileImage: payload.picture || "",
+      // hasAcceptedTerms: false por default
     });
+    created = true;
+
+    // se o front já confirmou termos antes de enviar a primeira requisição
+    if (acceptTerms) {
+      user.hasAcceptedTerms = true;
+      user.termsVersion = requiredVersion;
+      user.hasAcceptedTermsAt = new Date();
+    }
   } else {
-    // se já existe mas faltam campos obrigatórios (pós-migração)
-    const patch = {};
-    if (!user.firstName) patch.firstName = firstName;
-    if (user.lastName == null) patch.lastName = lastName; // permite vazio
-    if (!user.username) patch.username = await uniqueUsername(firstName);
-    if (!user.googleId) patch.googleId = payload.sub;
-    if (!user.profileImage && payload.picture)
-      patch.profileImage = payload.picture;
-    if (Object.keys(patch).length) user.set(patch);
+    // “patch” em campos que possam estar vazios (migrações, etc.)
+    if (!user.firstName) { user.firstName = firstName; changed = true; }
+    if (user.lastName == null) { user.lastName = lastName; changed = true; }
+    if (!user.username) { user.username = await uniqueUsername(firstName); changed = true; }
+    if (!user.googleId) { user.googleId = payload.sub; changed = true; }
+    if (!user.profileImage && payload.picture) { user.profileImage = payload.picture; changed = true; }
+
+    // se o cliente sinalizou aceite agora (primeiro login ou forçado por nova versão)
+    const needsTerms = !user.hasAcceptedTerms || String(user.termsVersion) !== requiredVersion;
+    if (acceptTerms && needsTerms) {
+      user.hasAcceptedTerms = true;
+      user.termsVersion = requiredVersion;
+      user.hasAcceptedTermsAt = new Date();
+      changed = true;
+    }
   }
 
-  await user.save();
-  return user;
+  if (created || changed) {
+    await user.save();
+  }
+
+  return { user, created };
 }
+
 
 function createJwtForUser(userId, expiresIn) {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn });

@@ -8,7 +8,7 @@ const userSchema = new mongoose.Schema(
       required: true,
       unique: false,
       trim: true,
-      default: "User"
+      default: "User",
     },
 
     lastName: {
@@ -83,11 +83,20 @@ const userSchema = new mongoose.Schema(
       default: false, // New users are not verified by default
     },
 
+    // models/User.js
     hasAcceptedTerms: {
       type: Boolean,
       default: false,
     },
 
+    termsVersion: { 
+      type: String, 
+      default: null },
+
+    hasAcceptedTermsAt: { 
+      type: Date, 
+      default: null 
+    },
 
     // Add reset password token and expiration fields
     resetPasswordToken: {
@@ -149,7 +158,7 @@ const userSchema = new mongoose.Schema(
 
     church: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Church"
+      ref: "Church",
     },
 
     bio: {
@@ -163,7 +172,6 @@ const userSchema = new mongoose.Schema(
     },
 
     notificationsByEmail: { type: Boolean, default: true },
-
   },
   { timestamps: true }
 ); // Automatically adds `createdAt` and `updatedAt` fields

@@ -31,6 +31,7 @@ const {
 } = require("../utils/googleAuth");
 
 const { sendVerificationSMS } = require("../utils/sms");
+const { ConversationRelay } = require("twilio/lib/twiml/VoiceResponse");
 
 router.get("/getAllUsers", async (req, res) => {
   // console.log("🟢 🟢 🟢  rota de buscar todos os usuarios...");
@@ -53,44 +54,82 @@ router.get("/getAllUsers", async (req, res) => {
 });
 
 // google login
+// POST /api/users/google-login
 router.post("/google-login", async (req, res) => {
   console.log("🥭🥭🥭 logging in via google ");
   try {
-    const { credential, token, rememberMe } = req.body;
+    const { credential, token, rememberMe, acceptTerms } = req.body;
     const idToken = credential || token;
     if (!idToken) return res.status(400).json({ message: "Token ausente" });
 
+    // 1) Verifica o token do Google e acha/cria o usuário
     const payload = await verifyGoogleToken(idToken);
-    const user = await findOrCreateUserFromGooglePayload(payload);
+    // Garanta que sua função retorne { user, created }
+    const { user: foundUser, created } =
+      await findOrCreateUserFromGooglePayload(payload);
 
+    // Se veio POJO, carregue o doc do Mongoose
+    const isDoc = !!foundUser && typeof foundUser.save === "function";
+    const user = isDoc ? foundUser : await User.findById(foundUser?._id);
+    if (!user) return res.status(401).json({ message: "Usuário não encontrado" });
+
+    // 2) Checa termos (com versão)
+    const requiredVersion = String(process.env.TERMS_VERSION || "1");
+    const hasAccepted = !!user.hasAcceptedTerms;
+    const currentVersion = user.termsVersion ? String(user.termsVersion) : null;
+    const mustAccept = !hasAccepted || currentVersion !== requiredVersion;
+
+    // Normaliza acceptTerms (true/"true"/1/"1")
+    const acceptFlag =
+      acceptTerms === true ||
+      acceptTerms === "true" ||
+      acceptTerms === 1 ||
+      acceptTerms === "1";
+
+    if (mustAccept) {
+      if (acceptFlag) {
+        user.hasAcceptedTerms = true;
+        user.termsVersion = requiredVersion;
+        user.hasAcceptedTermsAt = new Date();
+        await user.save();
+      } else {
+        // NÃO autentica e NÃO define cookie ainda
+        return res.status(428).json({
+          code: "TERMS_REQUIRED",
+          message: "Você precisa aceitar os Termos e a Privacidade para continuar.",
+          accepted: hasAccepted,
+          currentVersion,
+          requiredVersion,
+          createdNow: !!created,
+        });
+      }
+    }
+
+    // 3) Tudo certo → emite token e cookie
     const expiresIn = rememberMe ? "30d" : "7d";
-    const maxAge = rememberMe
-      ? 30 * 24 * 60 * 60 * 1000
-      : 7 * 24 * 60 * 60 * 1000;
+    const maxAge = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
     const jwtToken = createJwtForUser(user._id, expiresIn);
 
     const isProd = process.env.NODE_ENV === "production";
     res.cookie("token", jwtToken, {
       httpOnly: true,
-      sameSite: isProd ? "none" : "lax",
+      sameSite: isProd ? "none" : "lax", // use 'none' (minúsculo) com secure: true em produção
       secure: isProd,
       maxAge,
       path: "/",
     });
 
-    const hasAcceptedTerms = user.hasAcceptedTerms
-
-    console.log(hasAcceptedTerms)
-
     const { password, ...safe } = user.toObject();
-    res.json({ user: safe, token: jwtToken }); // <-- devolve token
+    return res.json({ user: safe, token: jwtToken });
   } catch (err) {
     console.error("google-login error:", err);
-    res
+    return res
       .status(401)
       .json({ message: "Token inválido ou falha na autenticação" });
   }
 });
+
+
 
 // helper: atualizar cache de contagem
 async function refreshMembersCount(churchId) {
