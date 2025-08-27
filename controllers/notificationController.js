@@ -1,5 +1,6 @@
 // controllers/notificationController.js
 const Notification = require("../models/Notification");
+const User = require("../models/User")
 const createNotificationUtil = require("../utils/notificationUtils");
 
 // Buscar todas as notificações de um usuário
@@ -98,5 +99,36 @@ exports.deleteNotification = async (req, res) => {
     res.status(200).json({ message: "Notificação deletada com sucesso." });
   } catch (error) {
     res.status(500).json({ message: "Erro ao deletar notificação." });
+  }
+};
+
+exports.toggleEmailNotification = async (req, res) => {
+  console.log("toggling notification by email");
+
+  try {
+    const userId = req.params.id || req.user._id; // caso use :id ou pegue do token
+    const { enabled } = req.body;
+
+    console.log("userId:", userId)
+    console.log("enabled:", enabled)
+
+    if (typeof enabled !== "boolean") {
+      return res.status(400).json({ error: "Campo 'enabled' deve ser boolean." });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $set: { notificationsByEmail: enabled } },
+      { new: true, select: "notificationsByEmail" }
+    );
+
+    if (!user) return res.status(404).json({ error: "Usuário não encontrado." });
+
+    console.log("opção de notificaçoes atualizada")
+
+    return res.json({ notificationsByEmail: user.notificationsByEmail });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erro ao alternar notificação por e-mail." });
   }
 };

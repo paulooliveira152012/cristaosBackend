@@ -10,9 +10,10 @@ const Membership = require("../models/churchMembers")
  * Lista de igrejas
  */
 
-router.get("/", async (req, res) => {
+router.get("/getChurches", async (req, res) => {
   console.log("🟢 getting all churches");
   const churches = await Church.find().sort({ createdAt: -1 });
+  console.log("churches:", churches)
   res.json(churches);
 });
 

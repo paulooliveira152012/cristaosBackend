@@ -6,6 +6,7 @@ const {
   markAsRead,
   markAllAsRead,
   deleteNotification,
+  toggleEmailNotification
 } = require("../controllers/notificationController.js");
 
 // const { protect } = require("../middleware/auth");
@@ -25,5 +26,12 @@ router.put("/read/:id", protect, markAsRead);
 
 // ❌ DELETE excluir uma notificação
 router.delete("/:id", protect, deleteNotification);
+
+router.use((req, _res, next) => {
+  console.log("[/api/notifications] hit:", req.method, req.originalUrl);
+  next();
+});
+
+router.put("/:id/notifications/email", protect, toggleEmailNotification)
 
 module.exports = router;

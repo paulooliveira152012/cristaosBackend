@@ -154,7 +154,9 @@ const userSchema = new mongoose.Schema(
     profileCoverImage: {
       type: String,
       default: "",
-    }
+    },
+    
+    notificationsByEmail: {type: Boolean },
 
   },
   { timestamps: true }
