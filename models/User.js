@@ -83,6 +83,12 @@ const userSchema = new mongoose.Schema(
       default: false, // New users are not verified by default
     },
 
+    hasAcceptedTerms: {
+      type: Boolean,
+      default: false,
+    },
+
+
     // Add reset password token and expiration fields
     resetPasswordToken: {
       type: String,

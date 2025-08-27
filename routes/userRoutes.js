@@ -37,7 +37,7 @@ router.get("/getAllUsers", async (req, res) => {
 
   try {
     const users = await User.find({}, "_id username profileImage");
-    console.log("response:", users);
+    // console.log("response:", users);
     // populate currentUser's friends
     const currentUserFriends = await User.findById(req.userId).populate(
       "friends",
@@ -77,6 +77,10 @@ router.post("/google-login", async (req, res) => {
       maxAge,
       path: "/",
     });
+
+    const hasAcceptedTerms = user.hasAcceptedTerms
+
+    console.log(hasAcceptedTerms)
 
     const { password, ...safe } = user.toObject();
     res.json({ user: safe, token: jwtToken }); // <-- devolve token

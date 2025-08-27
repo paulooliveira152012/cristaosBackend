@@ -53,7 +53,7 @@ router.get("/alllistings", async (req, res) => {
       (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
     );
 
-    console.log("returning listings:", { listings, feed });
+    // console.log("returning listings:", { listings, feed });
 
     // Compatível com o front: retorna feed (novo) e listings (legado)
     res.status(200).json({ listings, feed });

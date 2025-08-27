@@ -6,7 +6,7 @@ const { verifyToken, verifyLeader } = require("../utils/auth"); // middlewares d
 
 // Rota para listar todas as postagens (acesso de líder)
 router.get("/admFetchAds", async (req, res) => {
-  console.log(" 🟢 🟢 🟢 GET ADM ROUTE REACHED")
+  // console.log(" 🟢 🟢 🟢 GET ADM ROUTE REACHED")
   try {
     const adds = await Add.find().populate("createdBy", "username");
     // console.log("Fetched adds:", adds);
