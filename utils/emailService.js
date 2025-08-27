@@ -82,7 +82,13 @@ function buildNotificationEmail({ username, path = "/notifications" } = {}) {
   const url = `${API_URL}${path}`;
   console.log("url:", url)
   const subject = "Você tem uma nova notificação";
-  const text = `Olá ${username || ""}, você recebeu uma nova notificação. Veja em: ${url}`;
+    // Fallback em texto puro
+  const text = [
+    `Olá ${username || ""}, você recebeu uma nova notificação.`,
+    `Acesse: ${url}`,
+    "",
+    "Dica: você pode gerenciar suas notificações por e-mail na página de Notificações."
+  ].join("\n");
 
   const html = `
 <!doctype html>
@@ -91,15 +97,24 @@ function buildNotificationEmail({ username, path = "/notifications" } = {}) {
     <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:10px;padding:24px;border:1px solid #eee">
       <h2 style="margin:0 0 12px 0;">Você tem uma nova notificação</h2>
       <p style="margin:0 0 20px 0;">Olá ${username || ""}, clique no botão abaixo para ver:</p>
+
       <p style="text-align:center;margin:24px 0;">
-        <a href="${url}" 
+        <a href="${url}"
            style="background:#111;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px;display:inline-block;">
           Ver notificações
         </a>
       </p>
+
       <p style="font-size:12px;color:#555;margin-top:24px">
         Se o botão não funcionar, copie e cole este link no navegador:<br>
         <a href="${url}" style="color:#111">${url}</a>
+      </p>
+
+      <hr style="border:none;border-top:1px solid #eee;margin:24px 0" />
+
+      <p style="font-size:12px;color:#555;margin:0">
+        <strong>Preferências de e-mail:</strong> você pode gerenciar suas notificações por e-mail diretamente na
+        <a href="${url}" style="color:#111;text-decoration:underline;">página de Notificações</a>.
       </p>
     </div>
   </body>
