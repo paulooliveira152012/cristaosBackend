@@ -196,4 +196,68 @@ router.get("/", async (req, res) => {
   }
 });
 
+// PUT /api/intermeeting
+// PUT /api/intermeeting/:id
+router.put("/:id", async (req, res) => {
+  console.log("updating meeting...", req.params.id);
+
+  // Se o cliente mandar { payload: {...} } também funciona
+  const data = req.body?.payload ?? req.body;
+
+  // Monte um objeto de atualização só com os campos enviados
+  const update = {};
+
+  if (data.name !== undefined) update.name = data.name;
+  if (data.summary !== undefined) update.summary = data.summary;
+  if (data.address !== undefined) update.address = data.address;
+  if (data.website !== undefined) update.website = data.website;
+
+  if (data.meetingDate !== undefined) {
+    // aceita null para limpar, string/Date para setar
+    update.meetingDate = data.meetingDate ? new Date(data.meetingDate) : null;
+  }
+
+  // Se vierem lng/lat válidos, atualiza a localização
+  const hasLng = data.lng !== undefined && data.lng !== null && data.lng !== "";
+  const hasLat = data.lat !== undefined && data.lat !== null && data.lat !== "";
+
+  if (hasLng && hasLat) {
+    const lng = Number(data.lng);
+    const lat = Number(data.lat);
+    if (Number.isFinite(lng) && Number.isFinite(lat)) {
+      update.location = { type: "Point", coordinates: [lng, lat] }; // [lng, lat]
+    } else {
+      return res.status(400).json({ message: "lng/lat inválidos" });
+    }
+  }
+
+  try {
+    // Opção A: atualizar direto
+    const doc = await InterMeeting.findByIdAndUpdate(
+      req.params.id,
+      update,
+      { new: true, runValidators: true }
+    );
+
+    if (!doc) {
+      return res.status(404).json({ message: "Reunião não encontrada" });
+    }
+
+    console.log("atualizado!")
+    return res.json(doc);
+
+    // ---- Opção B (alternativa): carregar, setar e salvar ----
+    // const doc = await InterMeeting.findById(req.params.id);
+    // if (!doc) return res.status(404).json({ message: "Reunião não encontrada" });
+    // doc.set(update);
+    // await doc.save();
+    // return res.json(doc);
+
+  } catch (err) {
+    console.error("Erro ao atualizar reunião:", err);
+    return res.status(500).json({ message: "Erro interno ao atualizar" });
+  }
+});
+
+
 module.exports = router;
