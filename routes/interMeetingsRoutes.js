@@ -162,7 +162,7 @@ router.post("/", async (req, res) => {
 
 // GET /api/intermeetings/geojson
 // GET /api/intermeeting
-router.get("/", async (req, res) => {
+router.get("/geojson", async (req, res) => {
   console.log("🟢 PUBLIC: getting interdenominational meetings");
   try {
     const rows = await InterMeeting.find(
@@ -200,16 +200,43 @@ router.get("/", async (req, res) => {
 // PUT /api/intermeeting/:id
 // routes/interMeetingRoutes.js (trecho)
 router.put("/:id", async (req, res) => {
+  console.log("route for updating a meeting...");
   try {
-    const { name, summary, address, website, meetingDate, location, lng, lat } = req.body;
+    const {
+      name,
+      summary,
+      address,
+      website,
+      meetingDate,
+      location,
+      lng,
+      lat,
+    } = req.body;
 
-    // Aceita tanto location completo quanto lng/lat soltos
-    let loc = location;
-    if (!loc && (lng !== undefined && lat !== undefined)) {
+    console.log("RAW BODY:", req.body);
+
+    // Monte `loc` de forma tolerante
+    let loc = null;
+
+    // 1) Se veio location completo e válido:
+    if (
+      location?.type === "Point" &&
+      Array.isArray(location.coordinates) &&
+      location.coordinates.length === 2 &&
+      Number.isFinite(Number(location.coordinates[0])) &&
+      Number.isFinite(Number(location.coordinates[1]))
+    ) {
+      const nLng = Number(location.coordinates[0]);
+      const nLat = Number(location.coordinates[1]);
+      loc = { type: "Point", coordinates: [nLng, nLat] };
+    }
+
+    // 2) Senão, tente com lng/lat soltos:
+    if (!loc && lng !== undefined && lat !== undefined) {
       const nLng = Number(lng);
       const nLat = Number(lat);
       if (Number.isFinite(nLng) && Number.isFinite(nLat)) {
-        loc = { type: "Point", coordinates: [nLng, nLat] }; // [lng, lat]
+        loc = { type: "Point", coordinates: [nLng, nLat] };
       }
     }
 
@@ -218,7 +245,13 @@ router.put("/:id", async (req, res) => {
     if (summary !== undefined) update.summary = summary;
     if (address !== undefined) update.address = address;
     if (website !== undefined) update.website = website;
-    if (meetingDate) update.meetingDate = new Date(meetingDate);
+
+    // só atualiza meetingDate se veio um valor válido
+    if (meetingDate) {
+      const d = new Date(meetingDate);
+      if (!isNaN(d)) update.meetingDate = d;
+    }
+
     if (loc) update.location = loc;
 
     const updated = await InterMeeting.findByIdAndUpdate(
@@ -227,13 +260,17 @@ router.put("/:id", async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    if (!updated) return res.status(404).json({ message: "Meeting não encontrado" });
+    if (!updated) {
+      return res.status(404).json({ message: "Meeting não encontrado" });
+    }
+
     res.json(updated);
   } catch (err) {
     console.error("PUT /intermeeting/:id error:", err);
     res.status(500).json({ message: "Erro ao atualizar reunião" });
   }
 });
+
 
 
 

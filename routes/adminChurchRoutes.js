@@ -29,23 +29,24 @@ async function refreshMembersCount(churchId) {
  * GET /api/admChurchRoutes/geojson
  * GeoJSON pra usar direto no Mapbox
  */
-// GET /api/church/geojson  (público)
+// GET /api/admChurch/geojson  (público)
+// GET /api/admChurch/geojson (público)
 router.get("/geojson", async (req, res) => {
   console.log("🟢 PUBLIC: getting geojson for map");
+
   const churches = await Church.find(
     { "location.coordinates.0": { $exists: true } },
     { name: 1, summary: 1, location: 1, address: 1 }
-  );
+  ).lean(); // opcional: resposta menor/mais rápida
 
   const fc = {
     type: "FeatureCollection",
     features: churches
-      .filter(
-        (c) =>
-          Array.isArray(c.location?.coordinates) &&
-          c.location.coordinates.length === 2 &&
-          Number.isFinite(c.location.coordinates[0]) &&
-          Number.isFinite(c.location.coordinates[1])
+      .filter((c) =>
+        Array.isArray(c.location?.coordinates) &&
+        c.location.coordinates.length === 2 &&
+        Number.isFinite(c.location.coordinates[0]) &&
+        Number.isFinite(c.location.coordinates[1])
       )
       .map((c) => ({
         type: "Feature",
@@ -54,7 +55,7 @@ router.get("/geojson", async (req, res) => {
           title: c.name,
           description: c.summary || "",
           url: `/church/${c._id}`,
-          address: c.address || ""
+          address: c.address || "",
         },
         geometry: {
           type: "Point",
@@ -63,8 +64,9 @@ router.get("/geojson", async (req, res) => {
       })),
   };
 
-  res.json(fc);
+  res.type("application/geo+json").json(fc);
 });
+
 
 /**
  * GET /api/admChurchRoutes/:id
