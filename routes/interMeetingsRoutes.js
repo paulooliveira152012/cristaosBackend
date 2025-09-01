@@ -162,39 +162,51 @@ router.post("/", async (req, res) => {
 
 // GET /api/intermeetings/geojson
 // GET /api/intermeeting
+// routes/interMeetingRoutes.js
+// GET /api/intermeeting/geojson
 router.get("/geojson", async (req, res) => {
-  console.log("🟢 PUBLIC: getting interdenominational meetings");
+  console.log("🟢 PUBLIC: getting interdenominational meetings geojson");
   try {
     const rows = await InterMeeting.find(
       { "location.coordinates.0": { $exists: true } },
       { name: 1, summary: 1, address: 1, meetingDate: 1, website: 1, location: 1 }
     ).lean();
 
-    const meetings = (rows || [])
-      .filter(
-        (m) =>
-          Array.isArray(m?.location?.coordinates) &&
-          m.location.coordinates.length === 2 &&
-          Number.isFinite(m.location.coordinates[0]) &&
-          Number.isFinite(m.location.coordinates[1])
+    const features = (rows || [])
+      .filter(m =>
+        Array.isArray(m?.location?.coordinates) &&
+        m.location.coordinates.length === 2 &&
+        Number.isFinite(m.location.coordinates[0]) &&
+        Number.isFinite(m.location.coordinates[1])
       )
-      .map((m) => ({
-        id: String(m._id),
-        name: m.name,
-        summary: m.summary || "",
-        address: m.address || "",
-        website: m.website || "",
-        meetingDate: m.meetingDate ? m.meetingDate.toISOString() : null,
-        lng: m.location.coordinates[0],
-        lat: m.location.coordinates[1],
+      .map(m => ({
+        type: "Feature",
+        properties: {
+          id: String(m._id),
+          title: m.name,
+          description: m.summary || "",
+          address: m.address || "",
+          website: m.website || "",
+          meetingDate: m.meetingDate ? m.meetingDate.toISOString() : null,
+          url: `/intermeeting/${m._id}`,
+          pinColor: "#FF6600",
+        },
+        geometry: {
+          type: "Point",
+          coordinates: m.location.coordinates, // [lng, lat]
+        },
       }));
 
-    return res.json({ meetings });
+    res.type("application/geo+json").json({
+      type: "FeatureCollection",
+      features,
+    });
   } catch (err) {
-    console.error("❌ intermeeting list error:", err);
-    return res.status(500).json({ message: "Erro ao listar reuniões" });
+    console.error("❌ intermeeting geojson error:", err);
+    res.status(500).json({ message: "Erro ao listar reuniões" });
   }
 });
+
 
 // PUT /api/intermeeting
 // PUT /api/intermeeting/:id

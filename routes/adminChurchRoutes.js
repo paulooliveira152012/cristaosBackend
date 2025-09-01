@@ -32,7 +32,7 @@ async function refreshMembersCount(churchId) {
 // GET /api/admChurch/geojson  (público)
 // GET /api/admChurch/geojson (público)
 router.get("/geojson", async (req, res) => {
-  console.log("🟢 PUBLIC: getting geojson for map");
+  console.log("🟢 PUBLIC: getting CHURCH geojson for map");
 
   const churches = await Church.find(
     { "location.coordinates.0": { $exists: true } },
