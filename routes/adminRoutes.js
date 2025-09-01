@@ -7,6 +7,20 @@ const Add = require("../models/Add"); // modelo do MongoDB para Add
 const { verifyToken, verifyLeader } = require("../utils/auth"); // middlewares de autenticação/autorização
 const { protect } = require("../utils/auth");
 
+// ================ Visualize ================
+
+router.get("/getAllUsers", protect, async (req, res) => {
+  console.log("getting all memb ers")
+
+  try {
+    const allUsers = await User.find({})
+    console.log("allUsers:", allUsers)
+    res.send(allUsers)
+  } catch {
+    console.log("Erro ao buscar usuarios para pagina de gerenciamento")
+  }
+})
+
 
 // ================ Modify users ==============
 router.post("/makeLeader", protect, async (req, res) => {
