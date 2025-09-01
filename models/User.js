@@ -89,13 +89,14 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
 
-    termsVersion: { 
-      type: String, 
-      default: null },
+    termsVersion: {
+      type: String,
+      default: null,
+    },
 
-    hasAcceptedTermsAt: { 
-      type: Date, 
-      default: null 
+    hasAcceptedTermsAt: {
+      type: Date,
+      default: null,
     },
 
     // Add reset password token and expiration fields
@@ -112,6 +113,12 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       required: false,
       default: false,
+    },
+
+    role: {
+      type: String,
+      required: true,
+      default: "member",
     },
 
     // friend requests
@@ -172,6 +179,14 @@ const userSchema = new mongoose.Schema(
     },
 
     notificationsByEmail: { type: Boolean, default: true },
+    isBanned: { type: Boolean, default: false },
+    bannedAt: { type: Date, default: null },
+    bannedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    banReason: { type: String, default: "" },
   },
   { timestamps: true }
 ); // Automatically adds `createdAt` and `updatedAt` fields

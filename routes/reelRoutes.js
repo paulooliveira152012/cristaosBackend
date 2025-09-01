@@ -29,8 +29,16 @@ router.get("/allreels", async (req, res) => {
   console.log("🟢 Fetch all reels");
   try {
     const reels = await Reel.find({})
-      .populate("userId", "username profileImage")                   // autor do reel
-      .populate("comments.userId", "username profileImage")          // AUTOR DO COMENTÁRIO
+      .populate({
+        path: "userId",
+        select: "username profileImage", 
+        match: { isBanned: false },
+      })                   // autor do reel
+      .populate({
+        path: "comments.userId", 
+        select: "username profileImage",
+        match: { isBanned: false },
+      })          // AUTOR DO COMENTÁRIO
       .sort({ createdAt: -1 })
       .lean(); // manda objetos plain (melhor p/ frontend)
 

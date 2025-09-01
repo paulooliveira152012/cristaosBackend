@@ -1,8 +1,105 @@
 const express = require("express");
 const router = express.Router();
 const Listing = require("../models/Listing"); // modelo do MongoDB
+const User = require("../models/User");
+const mongoose = require("mongoose");
 const Add = require("../models/Add"); // modelo do MongoDB para Add
 const { verifyToken, verifyLeader } = require("../utils/auth"); // middlewares de autenticação/autorização
+const { protect } = require("../utils/auth");
+
+
+// ================ Modify users ==============
+router.post("/makeLeader", protect, async (req, res) => {
+  console.log("making a leader... ")
+  // const { mainLeader, userId } = req.body
+  // console.log(`mainLeader ${mainLeader} making ${userId} a leader`)
+  // res.json({ "response:", response })
+})
+
+// POST /api/adm/ban
+router.post("/ban", protect, async (req, res) => {
+  try {
+    // NUNCA confie em isLeader do body — use req.user (setado pelo protect)
+    if (!req.user?.leader) {
+      return res.status(403).json({ message: "Apenas líderes podem banir membros." });
+    }
+
+    const { userId, reason } = req.body;
+
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: "userId inválido/ausente." });
+    }
+
+    // segurança extra: impedir banir a si mesmo
+    if (String(req.user._id) === String(userId)) {
+      return res.status(400).json({ message: "Você não pode banir a si mesmo." });
+    }
+
+    const updated = await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          isBanned: true,
+          bannedAt: new Date(),
+          bannedBy: req.user._id,
+          banReason: reason || "",
+        },
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    return res.json({ ok: true, user: updated });
+  } catch (err) {
+    console.error("POST /ban error:", err);
+    return res.status(500).json({ message: "Erro ao banir usuário." });
+  }
+});
+
+// POST /api/adm/unban
+router.post("/unban", protect, async (req, res) => {
+  if (!req.user?.leader) return res.status(403).json({ message: "Apenas líderes." });
+  const { userId } = req.body;
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) return res.status(400).json({ message: "userId inválido" });
+
+  const updated = await User.findByIdAndUpdate(
+    userId,
+    { $set: { isBanned: false, bannedAt: null, bannedBy: null, banReason: "" } },
+    { new: true }
+  );
+  if (!updated) return res.status(404).json({ message: "Usuário não encontrado" });
+  res.json({ ok: true, user: updated });
+});
+
+// GET /api/adm/bannedUsers
+router.get("/bannedUsers", protect, async (req, res) => {
+  try {
+    // ajuste para o nome da flag no seu user (isLeader, leader, roles etc.)
+    const isLeader = req.user?.isLeader ?? req.user?.leader ?? false;
+    if (!isLeader) {
+      return res.status(403).json({ message: "Apenas líderes" });
+    }
+
+    const bannedUsers = await User.find(
+      { isBanned: true },
+      // selecione só o que precisa expor ao front
+      "_id username email profileImage isBanned bannedAt banReason"
+    )
+      .sort({ bannedAt: -1, updatedAt: -1 })
+      .lean();
+
+    return res.json({ bannedUsers });
+  } catch (err) {
+    console.error("bannedUsers error:", err);
+    return res.status(500).json({ message: "Erro ao listar usuários banidos" });
+  }
+});
+
+
+// =============== Listings ===================
 
 // Rota para listar todas as postagens (acesso de líder)
 router.get("/admFetchAds", async (req, res) => {

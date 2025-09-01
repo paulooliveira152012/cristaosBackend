@@ -18,50 +18,69 @@ const { protect } = require("../utils/auth"); // middleware de autenticação
 // Get All Listings + Reposts no mesmo payload
 router.get("/alllistings", async (req, res) => {
   try {
-    const listings = await Listing.find()
-      .populate("userId", "username profileImage")                // autor
-      .populate("poll.votes.userId", "username profileImage")     // votantes
-      .populate("shares", "username profileImage")                // QUEM repostou
+    const listings = await Listing.find({})
+      .populate({
+        path: "userId",
+        select: "username profileImage",
+        match: { isBanned: { $ne: true } }, // autor não banido
+      })
+      .populate({
+        path: "poll.votes.userId",
+        select: "username profileImage",
+        match: { isBanned: { $ne: true } }, // votantes não banidos
+      })
+      .populate({
+        path: "shares",
+        select: "username profileImage",
+        match: { isBanned: { $ne: true } }, // reposters não banidos
+      })
       .lean();
 
-    // Monta feed: original + um item por repost
+    // 1) remove posts cujo autor foi banido (userId ficou null)
+    const visible = (listings || []).filter((l) => !!l.userId);
+
+    // 2) limpa votos de banidos (userId null após populate)
+    for (const l of visible) {
+      if (l.poll && Array.isArray(l.poll.votes)) {
+        l.poll.votes = l.poll.votes.filter((v) => !!v.userId);
+        // se você tiver contadores derivados, atualize aqui (opcional)
+        // l.poll.total = l.poll.votes.length;
+      }
+    }
+
+    // 3) monta feed (post + um item por repost)
     const feed = [];
-    for (const l of listings) {
-      // item do post original
+    for (const l of visible) {
+      // item original
       feed.push({
         type: "listing",
         listing: l,
         createdAt: l.createdAt,
       });
 
-      // itens de repost (um por usuário em `shares`)
+      // itens de repost (shares já veio só com não banidos)
       if (Array.isArray(l.shares) && l.shares.length) {
         for (const reposter of l.shares) {
           feed.push({
             type: "repost",
             listing: l,
-            reposter,                  // { _id, username, profileImage }
-            // ⚠️ Sem timestamp do repost no schema atual, usamos o do post
-            createdAt: l.createdAt,
+            reposter,          // {_id, username, profileImage}
+            createdAt: l.createdAt, // sem timestamp de repost no schema
           });
         }
       }
     }
 
-    // Ordena por createdAt desc (com a limitação acima)
-    feed.sort(
-      (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
-    );
+    // 4) ordena por data (desc)
+    feed.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
-    // console.log("returning listings:", { listings, feed });
-
-    // Compatível com o front: retorna feed (novo) e listings (legado)
-    res.status(200).json({ listings, feed });
+    return res.status(200).json({ listings: visible, feed });
   } catch (error) {
     console.error("Error fetching listings:", error);
-    res.status(500).json({ message: "Error fetching listings", error });
+    return res.status(500).json({ message: "Error fetching listings" });
   }
 });
+
 
 
 // Create Listing
