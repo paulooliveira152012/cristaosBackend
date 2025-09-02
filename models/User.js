@@ -180,22 +180,18 @@ const userSchema = new mongoose.Schema(
 
     notificationsByEmail: { type: Boolean, default: true },
 
-    strikes: [
-      {
-        listingId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Listing",
-          default: null,
-        },
-        reason: { type: String, default: "" },
-        issuedBy: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-          required: true,
-        },
-        issuedAt: { type: Date, default: Date.now },
-      },
-    ],
+    // Subdoc inline, sem schema separado e sem coleção própria
+strikes: {
+  type: [{
+    listingId: { type: mongoose.Schema.Types.ObjectId, ref: "Listing", default: null },
+    reason:    { type: String, default: "" },
+    issuedBy:  { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    issuedAt:  { type: Date, default: Date.now },
+  }],
+  default: [],                                  // nunca undefined
+  set: (v) => (Array.isArray(v) ? v.filter(Boolean) : []), // converte "" -> []
+},
+
 
     isBanned: { type: Boolean, default: false },
     bannedAt: { type: Date, default: null },
@@ -208,6 +204,14 @@ const userSchema = new mongoose.Schema(
   },
   { timestamps: true }
 ); // Automatically adds `createdAt` and `updatedAt` fields
+
+// 🔒 Rede de segurança para garantir que strikes nunca seja string
+userSchema.pre("validate", function(next) {
+  if (!Array.isArray(this.strikes)) {
+    this.strikes = [];
+  }
+  next();
+});
 
 // Create the user model
 const User = mongoose.model("User", userSchema);
