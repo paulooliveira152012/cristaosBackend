@@ -81,7 +81,7 @@ router.post("/unban", protect, async (req, res) => {
 
   const updated = await User.findByIdAndUpdate(
     userId,
-    { $set: { isBanned: false, bannedAt: null, bannedBy: null, banReason: "" } },
+    { $set: { isBanned: false, bannedAt: null, bannedBy: null, banReason: "", strikes: "" } },
     { new: true }
   );
   if (!updated) return res.status(404).json({ message: "Usuário não encontrado" });
@@ -111,6 +111,61 @@ router.get("/bannedUsers", protect, async (req, res) => {
     return res.status(500).json({ message: "Erro ao listar usuários banidos" });
   }
 });
+
+// PUT /api/adm/strike
+router.put("/strike", protect, async (req, res) => {
+  try {
+    const { listingId, userId, reason } = req.body;
+
+    if (!userId) return res.status(400).json({ message: "userId é obrigatório" });
+    // (Opcional) exija permissão:
+    if (!req.user?.leader) return res.status(403).json({ message: "Apenas líderes podem aplicar strike" });
+
+    const user = await User.findById(userId).select("strikes isBanned");
+    if (!user) return res.status(404).json({ message: "Usuário não encontrado" });
+    if (user.isBanned) return res.status(409).json({ message: "Usuário já está banido" });
+
+    // prepara o objeto strike
+    const strike = {
+      listingId: listingId && mongoose.isValidObjectId(listingId) ? listingId : null,
+      reason: reason || "Violação das regras",
+      issuedBy: req.user._id,               // vindo do middleware `protect`
+      issuedAt: new Date(),
+    };
+
+    // garante array
+    if (!Array.isArray(user.strikes)) user.strikes = [];
+    user.strikes.push(strike);
+
+    // se chegou a 3 strikes → ban
+    if (user.strikes.length >= 3) {
+      user.isBanned = true;
+      user.bannedAt = new Date();
+      user.bannedBy = req.user._id;
+      user.banReason = `Ban automático após 3 strikes. Último motivo: ${strike.reason}`;
+      await user.save();
+      return res.json({
+        ok: true,
+        action: "banned",
+        strikes: user.strikes.length,
+        userId: user._id,
+      });
+    }
+
+    // apenas registrou o strike
+    await user.save();
+    return res.json({
+      ok: true,
+      action: "strike_added",
+      strikes: user.strikes.length,
+      userId: user._id,
+    });
+  } catch (err) {
+    console.error("PUT /adm/strike error:", err);
+    return res.status(500).json({ message: "Erro ao aplicar strike" });
+  }
+});
+
 
 
 // =============== Listings ===================

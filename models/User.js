@@ -179,6 +179,24 @@ const userSchema = new mongoose.Schema(
     },
 
     notificationsByEmail: { type: Boolean, default: true },
+
+    strikes: [
+      {
+        listingId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Listing",
+          default: null,
+        },
+        reason: { type: String, default: "" },
+        issuedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        issuedAt: { type: Date, default: Date.now },
+      },
+    ],
+
     isBanned: { type: Boolean, default: false },
     bannedAt: { type: Date, default: null },
     bannedBy: {
