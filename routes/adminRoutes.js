@@ -114,8 +114,10 @@ router.get("/bannedUsers", protect, async (req, res) => {
 
 // PUT /api/adm/strike
 router.put("/strike", protect, async (req, res) => {
+  console.log("strike route")
   try {
-    const { listingId, userId, reason } = req.body;
+    const { listingId, userId, strikeReason } = req.body;
+    console.log("listingId, userId, strikeReason:", listingId, userId, strikeReason)
 
     if (!userId) return res.status(400).json({ message: "userId é obrigatório" });
     // (Opcional) exija permissão:
@@ -128,7 +130,7 @@ router.put("/strike", protect, async (req, res) => {
     // prepara o objeto strike
     const strike = {
       listingId: listingId && mongoose.isValidObjectId(listingId) ? listingId : null,
-      reason: reason || "Violação das regras",
+      reason: strikeReason || "Violação das regras",
       issuedBy: req.user._id,               // vindo do middleware `protect`
       issuedAt: new Date(),
     };
@@ -165,6 +167,28 @@ router.put("/strike", protect, async (req, res) => {
     return res.status(500).json({ message: "Erro ao aplicar strike" });
   }
 });
+
+router.get("/strikeHistory/:userId", async (req, res) => {
+  console.log("route for fetching strike history...")
+  const { userId } = req.params;
+  console.log("userId:", userId)
+
+  try {
+    const user = await User.findById(userId)
+
+    // console.log("user:", user)
+
+    const strikes = user.strikes
+
+    console.log("strikes:", strikes)
+
+    res.send(strikes)
+    
+  } catch (err) {
+    console.log("error:", err)
+  }
+  
+})
 
 
 
