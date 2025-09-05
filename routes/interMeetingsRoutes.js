@@ -1,7 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const InterMeeting = require("../models/InterMeeting");
+const User = require("../models/User")
 const mongoose = require("mongoose")
+const { protect } = require("../utils/auth")
 
 // POST /api/intermeeting/
 router.post("/", async (req, res) => {
@@ -352,6 +354,93 @@ router.get("/intermeetings/:id", async (req, res) => {
   }
 });
 
+
+/**
+ * GET /api/intermeeting/intermeetings/:id/attendees?limit=30
+ * Lista de quem vai + total + (se logado) imGoing
+ */
+router.get("/:id/attendees", protect, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const limit = Math.max(1, Math.min(Number(req.query.limit) || 30, 100));
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ ok: false, message: "ID inválido." });
+    }
+
+    const doc = await InterMeeting.findById(id).select("attendees").lean();
+    if (!doc) return res.status(404).json({ ok: false, message: "Reunião não encontrada." });
+
+    const count = Array.isArray(doc.attendees) ? doc.attendees.length : 0;
+    const ids = (doc.attendees || []).slice(0, limit);
+
+    const users = await User.find(
+      { _id: { $in: ids } },
+      { username: 1, profileImage: 1 }
+    ).lean();
+
+    const imGoing = doc.attendees?.some(
+      (u) => String(u) === String(req.user._id)
+    ) || false;
+
+    return res.json({
+      ok: true,
+      count,
+      imGoing,
+      items: users.map(u => ({
+        _id: String(u._id),
+        username: u.username,
+        profileImage: u.profileImage || "",
+      })),
+    });
+  } catch (err) {
+    console.error("GET attendees error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao carregar presença." });
+  }
+});
+
+/**
+ * POST /api/intermeeting/intermeetings/:id/rsvp
+ * body: { going: true|false }
+ * Confirma ou cancela presença do usuário logado
+ */
+router.post("/:id/rsvp", protect, async (req, res) => {
+  console.log("confirmando/cancelando presença")
+  try {
+    const { id } = req.params;
+    const { going } = req.body || {};
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ ok: false, message: "ID inválido." });
+    }
+
+    let updated;
+    if (going === true) {
+      updated = await InterMeeting.findByIdAndUpdate(
+        id,
+        { $addToSet: { attendees: req.user._id } },
+        { new: true, projection: "attendees" }
+      );
+    } else {
+      updated = await InterMeeting.findByIdAndUpdate(
+        id,
+        { $pull: { attendees: req.user._id } },
+        { new: true, projection: "attendees" }
+      );
+    }
+
+    if (!updated) {
+      return res.status(404).json({ ok: false, message: "Reunião não encontrada." });
+    }
+
+    return res.json({
+      ok: true,
+      going: going === true,
+      count: Array.isArray(updated.attendees) ? updated.attendees.length : 0,
+    });
+  } catch (err) {
+    console.error("POST rsvp error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao atualizar presença." });
+  }
+});
 
 
 
