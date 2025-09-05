@@ -197,6 +197,8 @@ router.get("/geojson", async (req, res) => {
         },
       }));
 
+      console.log("found meetings:", rows)
+
     res.type("application/geo+json").json({
       type: "FeatureCollection",
       features,
@@ -204,6 +206,50 @@ router.get("/geojson", async (req, res) => {
   } catch (err) {
     console.error("❌ intermeeting geojson error:", err);
     res.status(500).json({ message: "Erro ao listar reuniões" });
+  }
+});
+
+// GET /api/intermeeting/intermeetings
+router.get("/intermeetings", async (req, res) => {
+  try {
+    // ajuste os campos que você precisa no select
+    const rows = await InterMeeting.find(
+      {},
+      { name: 1, summary: 1, address: 1, meetingDate: 1, website: 1, location: 1, createdAt: 1, updatedAt: 1 }
+    )
+      .sort({ meetingDate: 1, createdAt: -1 })
+      .lean();
+
+    const meetings = (rows || []).map((m) => {
+      const coords = Array.isArray(m?.location?.coordinates)
+        ? m.location.coordinates
+        : [undefined, undefined];
+      const [lng, lat] = coords;
+
+      return {
+        _id: String(m._id),
+        id: String(m._id),           // ajuda no front
+        name: m.name || "",
+        title: m.name || "",         // compat UI
+        summary: m.summary || "",
+        description: m.summary || "",// compat UI
+        address: m.address || "",
+        website: m.website || "",
+        meetingDate: m.meetingDate ? m.meetingDate.toISOString() : null,
+        lat: Number.isFinite(lat) ? lat : undefined,
+        lng: Number.isFinite(lng) ? lng : undefined,
+        location: m.location || (Number.isFinite(lat) && Number.isFinite(lng)
+          ? { type: "Point", coordinates: [lng, lat] }
+          : undefined),
+        createdAt: m.createdAt,
+        updatedAt: m.updatedAt,
+      };
+    });
+
+    return res.status(200).json({ meetings });
+  } catch (err) {
+    console.error("❌ intermeetings list error:", err);
+    return res.status(500).json({ message: "Erro ao listar reuniões" });
   }
 });
 

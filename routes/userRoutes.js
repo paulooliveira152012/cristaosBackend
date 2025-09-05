@@ -1176,49 +1176,57 @@ router.post("/saveBio", protect, async (req, res) => {
 // POST /api/users/report
 // POST /api/reports
 router.post("/reports", protect, async (req, res) => {
-  try {
-    const reporterId = req.user._id; // ← vem do JWT (protect)
-    const { targetId, reason, source, context } = req.body;
+  console.log("reporting a user...")
+   try {
+    const reporterId = req.user._id; // ✅ confie no middleware
+    const { targetId, reason, source = "profile", category = "other", context = {} } = req.body;
 
     if (!targetId || !mongoose.isValidObjectId(targetId)) {
-      return res.status(400).json({ message: "targetId inválido/ausente" });
+      return res.status(400).json({ ok: false, message: "targetId inválido/ausente" });
     }
     if (!reason || !String(reason).trim()) {
-      return res.status(400).json({ message: "Motivo é obrigatório" });
+      return res.status(400).json({ ok: false, message: "Motivo obrigatório" });
     }
     if (String(reporterId) === String(targetId)) {
-      return res.status(400).json({ message: "Você não pode reportar a si mesmo." });
+      return res.status(400).json({ ok: false, message: "Você não pode reportar a si mesmo." });
     }
 
-    // (opcional) dedupe simples por janela de tempo
-    const now = new Date();
-    const since = new Date(now.getTime() - 10 * 60 * 1000); // 10min
-    const existing = await Report.findOne({
-      reportedUser: targetId,
+    // dedupe simples: últimos 20 min
+    const windowMs = 20 * 60 * 1000;
+    const since = new Date(Date.now() - windowMs);
+    const sameRecent = await Report.findOne({
       reportingUser: reporterId,
+      reportedUser: targetId,
+      source,
+      "context.listing": context?.listing || null,
+      "context.message": context?.message || null,
       reason: reason.trim(),
       createdAt: { $gte: since },
-    });
+    }).lean();
 
-    if (existing) {
-      return res.json({ ok: true, deduped: true, reportId: existing._id });
+    if (sameRecent) {
+      return res.status(200).json({ ok: true, deduped: true, reportId: sameRecent._id });
     }
 
-    const report = await Report.create({
-      reportedUser: targetId,
+    const doc = await Report.create({
       reportingUser: reporterId,
+      reportedUser: targetId,
       reason: reason.trim(),
-      source: source || "unknown",
-      context: context || null,
-      status: "pending",
+      source,
+      category,
+      context: {
+        listing: context?.listing || undefined,
+        comment: context?.comment || undefined,
+        message: context?.message || undefined,
+        url: context?.url || undefined,
+      },
+      evidence: Array.isArray(req.body.evidence) ? req.body.evidence : [],
     });
 
-    console.log("report criado!")
-
-    return res.json({ ok: true, reportId: report._id, deduped: false });
+    return res.status(201).json({ ok: true, reportId: doc._id });
   } catch (err) {
-    console.error("POST /api/reports error:", err);
-    return res.status(500).json({ message: "Erro ao registrar reporte" });
+    console.error("POST /reportUser error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao criar reporte" });
   }
 });
 

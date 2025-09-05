@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Listing = require("../models/Listing"); // modelo do MongoDB
 const User = require("../models/User");
+const Report = require("../models/Reports")
 const mongoose = require("mongoose");
 const Add = require("../models/Add"); // modelo do MongoDB para Add
 const { verifyToken, verifyLeader } = require("../utils/auth"); // middlewares de autenticação/autorização
@@ -364,5 +365,59 @@ router.get("/admFetchAd/:addId", verifyToken, verifyLeader, async (req, res) => 
     res.status(500).json({ message: "Erro interno ao buscar postagem." });
   }
 });
+
+// routes/adm.js
+// routes/adm.js
+router.get("/getAllReports", protect, verifyLeader, async (req, res) => {
+  try {
+    const reports = await Report.find({})
+      .sort({ createdAt: -1 })
+      .populate([
+        { path: "reportedUser",  select: "_id username email profileImage" },
+        { path: "reportingUser", select: "_id username email profileImage" },
+        { path: "context.listing", select: "_id type blogTitle imageUrl" }, // opcional
+      ])
+      .lean({ virtuals: true });
+
+    return res.status(200).json({ ok: true, items: reports });
+  } catch (err) {
+    console.error("GET /getAllReports error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao buscar reports" });
+  }
+});
+
+router.post("/reports/:id/resolve", protect, verifyLeader, async (req, res) => {
+  try {
+    const { action = "none", actionNotes = "" } = req.body;
+    const allowed = ["none","warn","strike","ban","other"];
+    if (!allowed.includes(action)) {
+      return res.status(400).json({ ok: false, message: "Ação inválida" });
+    }
+
+    const updated = await Report.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          status: "actioned",
+          action,
+          actionNotes: actionNotes.trim(),
+          actionBy: req.user._id,
+          actionAt: new Date(),
+        },
+      },
+      { new: true }
+    ).populate([
+      { path: "reportedUser",  select: "_id username" },
+      { path: "reportingUser", select: "_id username" },
+    ]);
+
+    if (!updated) return res.status(404).json({ ok: false, message: "Report não encontrado" });
+    return res.json({ ok: true, item: updated });
+  } catch (err) {
+    console.error("POST /reports/:id/resolve error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao resolver report" });
+  }
+});
+
 
 module.exports = router;
