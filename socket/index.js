@@ -51,18 +51,45 @@ function getTokenFromSocket(socket) {
   return null;
 }
 function authMiddleware(io) {
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     try {
       const token = getTokenFromSocket(socket);
-      if (!token) return next(); // guests permitidos
+      if (!token) {
+        // guests permitidos: apenas não coloca userId
+        return next();
+      }
+
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      socket.data.userId = String(decoded.id || decoded._id || decoded.userId);
+
+      // 1) sv (session/global)
+      const currentSv = Number(process.env.SESSIONS_VERSION || 1);
+      if (Number(decoded.sv || 1) !== currentSv) {
+        return next(new Error("unauthorized"));
+      }
+
+      // 2) carrega usuário
+      const user = await User.findById(decoded.id).select("_id tokenVersion isBanned");
+      if (!user) return next(new Error("unauthorized"));
+
+      // 3) tv (tokenVersion por usuário)
+      const tokenTv = Number(decoded.tv || 0);
+      const userTv = Number(user.tokenVersion || 0);
+      if (tokenTv !== userTv) return next(new Error("unauthorized"));
+
+      // 4) ban
+      if (user.isBanned) return next(new Error("banned"));
+
+      // OK: anexa no socket e entra na sala do usuário
+      socket.data.userId = String(user._id);
+      socket.join(`user:${user._id}`);
+
       next();
-    } catch {
-      next();
+    } catch (err) {
+      next(new Error("unauthorized"));
     }
   });
 }
+
 const requireAuth = (socket, name, fn) => {
   return async (...args) => {
     if (!socket.data?.userId) {
@@ -127,7 +154,7 @@ async function registerOnline(socket, io) {
   socket.data.profileImage = user.profileImage; // <--- ADICIONE
 
   // sala pessoal (opcional)
-  socket.join(String(user._id));
+  socket.join(`user:${user._id}`);
 
   addUser({
     socketId: socket.id,
@@ -153,6 +180,8 @@ module.exports = function initSocket(io) {
     const uid = socket.data?.userId || null;
 
     if (uid) {
+      // assegura (de novo) que está na sala do user
+      socket.join(`user:${uid}`);
       await registerOnline(socket, io);
     } else {
       console.warn("⚠️ WS conectado sem userId (sem cookie/JWT no handshake?)");

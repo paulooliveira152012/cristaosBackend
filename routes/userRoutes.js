@@ -17,7 +17,12 @@ const Listing = require("../models/Listing");
 const Church = require("../models/church");
 const ChurchMembership = require("../models/churchMembers");
 const Comment = require("../models/Comment");
-const { protect } = require("../utils/auth");
+const { 
+  protect, 
+  setAuthCookies, 
+  createJwtForUser, 
+  clearAuthCookie
+} = require("../utils/auth");
 const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
 const createNotificationUtil = require("../utils/notificationUtils");
@@ -27,7 +32,6 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const {
   verifyGoogleToken,
   findOrCreateUserFromGooglePayload,
-  createJwtForUser,
 } = require("../utils/googleAuth");
 
 const { sendVerificationSMS } = require("../utils/sms");
@@ -74,10 +78,11 @@ router.post("/google-login", async (req, res) => {
 
     if (!user) return res.status(401).json({ message: "Usuário não encontrado" });
 
-    // ✅ 2) BLOQUEIO DE BANIDOS (antes de qualquer outra etapa)
-    if (user.isBanned) return res.status(403).json({ message: "Conta banida" })
+    // 2) Banidos fora
+    if (user.isBanned) {
+      return res.status(403).json({ code: "BANNED", message: "Conta banida" });
+    }
 
-    
     // 3) Checa termos (com versão)
     const requiredVersion = String(process.env.TERMS_VERSION || "1");
     const hasAccepted = !!user.hasAcceptedTerms;
@@ -108,19 +113,10 @@ router.post("/google-login", async (req, res) => {
       }
     }
 
-    // 4) Tudo certo → emite token e cookie
+    // 4) Emite token/cookie centralizado
     const expiresIn = rememberMe ? "30d" : "7d";
-    const maxAge = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
-    const jwtToken = createJwtForUser(user._id, expiresIn);
-
-    const isProd = process.env.NODE_ENV === "production";
-    res.cookie("token", jwtToken, {
-      httpOnly: true,
-      sameSite: isProd ? "none" : "lax",
-      secure: isProd,
-      maxAge,
-      path: "/",
-    });
+    const jwtToken = createJwtForUser(user, expiresIn); // << passe o doc
+    setAuthCookies(res, jwtToken, { rememberMe });
 
     const { password, ...safe } = user.toObject();
     return res.json({ user: safe, token: jwtToken });
@@ -499,7 +495,9 @@ router.post("/login", async (req, res) => {
     const user = await User.findOne(query);
     if (!user) return res.status(400).json({ message: "Credenciais inválidas" });
 
-    if (user.isBanned) return res.status(403).json({ message: "Conta banida" })
+    if (user.isBanned) {
+      return res.status(403).json({ code: "BANNED", message: "Conta banida" });
+    }
 
     if (!user.isVerified) {
       return res.status(403).json({ message: "Verifique sua conta antes de fazer login." });
@@ -521,7 +519,6 @@ router.post("/login", async (req, res) => {
     const currentVersion = user.termsVersion ? String(user.termsVersion) : null;
     const mustAccept = !hasAccepted || currentVersion !== requiredVersion;
 
-    // normaliza acceptTerms: true | "true" | 1 | "1"
     const acceptFlag =
       acceptTerms === true ||
       acceptTerms === "true" ||
@@ -535,7 +532,6 @@ router.post("/login", async (req, res) => {
         user.hasAcceptedTermsAt = new Date();
         await user.save();
       } else {
-        // NÃO autenticar e NÃO setar cookie ainda
         return res.status(428).json({
           code: "TERMS_REQUIRED",
           message: "Você precisa aceitar os Termos e a Privacidade para continuar.",
@@ -546,26 +542,13 @@ router.post("/login", async (req, res) => {
       }
     }
 
-    // --- JWT + Cookie (com session version) ---
+    // --- JWT + Cookie (usa tv/sv) ---
     const expiresIn = rememberMe ? "30d" : "7d";
-    const token = createJwtForUser(user._id, expiresIn); // <-- usa sv
+    const token = createJwtForUser(user, expiresIn); // << passe o doc do usuário
+    setAuthCookies(res, token, { rememberMe });      // << centralizado
 
-    const isProd =
-      process.env.NODE_ENV === "production" ||
-      process.env.FORCE_SECURE_COOKIE === "1";
-
-    res.cookie("token", token, {
-      httpOnly: true,
-      sameSite: isProd ? "None" : "Lax",  // em Express, "None" ou "none" funcionam; mantenha consistente
-      secure: isProd,
-      path: "/",
-      maxAge: (rememberMe ? 30 : 7) * 24 * 60 * 60 * 1000,
-    });
-
-    const userObject = user.toObject();
-    delete userObject.password;
-
-    return res.status(200).json({ user: userObject, token });
+    const { password: _pw, ...safe } = user.toObject();
+    return res.status(200).json({ user: safe, token });
   } catch (error) {
     console.error("Erro no login:", error);
     return res.status(500).json({ message: error.message });
@@ -585,13 +568,8 @@ router.get("/debug/cookies", (req, res) => {
 // User Signout
 router.post("/signout", (req, res) => {
   const isProd = process.env.NODE_ENV === "production";
-  res.clearCookie("token", {
-    httpOnly: true,
-    sameSite: isProd ? "none" : "lax",
-    secure: isProd,
-    path: "/",
-  });
-  res.json({ msg: "Sessão encerrada!" });
+   clearAuthCookie(res);
+  res.json({ ok: true, message: "Sessão encerrada!" });
 });
 
 router.delete("/delete-account/:id", protect, async (req, res) => {

@@ -103,14 +103,10 @@ async function findOrCreateUserFromGooglePayload(
 }
 
 
-function createJwtForUser(userId, expiresIn = "7d") {
-  const sv = Number(process.env.SESSIONS_VERSION || 1);
-  return jwt.sign({ id: userId, sv }, process.env.JWT_SECRET, { expiresIn });
-}
+
 
 
 module.exports = {
   verifyGoogleToken,
   findOrCreateUserFromGooglePayload,
-  createJwtForUser,
 };

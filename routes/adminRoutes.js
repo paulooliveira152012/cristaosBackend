@@ -31,23 +31,16 @@ router.post("/makeLeader", protect, async (req, res) => {
 })
 
 // POST /api/adm/ban
+// routes/adm.js
 router.post("/ban", protect, async (req, res) => {
   try {
-    // NUNCA confie em isLeader do body — use req.user (setado pelo protect)
-    if (!req.user?.leader) {
-      return res.status(403).json({ message: "Apenas líderes podem banir membros." });
-    }
+    if (!req.user?.leader) return res.status(403).json({ message: "Apenas líderes" });
 
     const { userId, reason } = req.body;
-
-    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId))
       return res.status(400).json({ message: "userId inválido/ausente." });
-    }
-
-    // segurança extra: impedir banir a si mesmo
-    if (String(req.user._id) === String(userId)) {
+    if (String(req.user._id) === String(userId))
       return res.status(400).json({ message: "Você não pode banir a si mesmo." });
-    }
 
     const updated = await User.findByIdAndUpdate(
       userId,
@@ -58,13 +51,14 @@ router.post("/ban", protect, async (req, res) => {
           bannedBy: req.user._id,
           banReason: reason || "",
         },
+        $inc: { tokenVersion: 1 }, // invalida todas as sessões desse usuário
       },
-      { new: true }
+      { new: true, projection: "-password" }
     );
+    if (!updated) return res.status(404).json({ message: "Usuário não encontrado." });
 
-    if (!updated) {
-      return res.status(404).json({ message: "Usuário não encontrado." });
-    }
+    // OPCIONAL: derrubar em tempo real
+    req.app.get("io")?.to(`user:${userId}`).emit("force-logout", { reason: "BANNED" });
 
     return res.json({ ok: true, user: updated });
   } catch (err) {
@@ -73,19 +67,49 @@ router.post("/ban", protect, async (req, res) => {
   }
 });
 
-// POST /api/adm/unban
-router.post("/unban", protect, async (req, res) => {
-  if (!req.user?.leader) return res.status(403).json({ message: "Apenas líderes." });
-  const { userId } = req.body;
-  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) return res.status(400).json({ message: "userId inválido" });
 
-  const updated = await User.findByIdAndUpdate(
-    userId,
-    { $set: { isBanned: false, bannedAt: null, bannedBy: null, banReason: "", strikes: "" } },
-    { new: true }
-  );
-  if (!updated) return res.status(404).json({ message: "Usuário não encontrado" });
-  res.json({ ok: true, user: updated });
+
+// POST /api/adm/unban
+// POST /api/adm/unban
+router.post("/unban", protect, verifyLeader, async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: "userId inválido/ausente." });
+    }
+
+    // idempotente: só “desbanir” quem está banido
+    const updated = await User.findOneAndUpdate(
+      { _id: userId, isBanned: true },
+      {
+        $set: {
+          isBanned: false,
+          unbannedAt: new Date(),
+          unbannedBy: req.user._id,
+        },
+        // limpa os marcadores do ban atual (mantém histórico/strikes separados)
+        $unset: { bannedAt: "", bannedBy: "", banReason: "" },
+        // NÃO mexa em tokenVersion aqui — ban já invalidou tokens.
+      },
+      { new: true, projection: "-password" }
+    );
+
+    if (!updated) {
+      const exists = await User.exists({ _id: userId });
+      if (!exists) return res.status(404).json({ message: "Usuário não encontrado." });
+      // já não estava banido
+      return res.json({ ok: true, alreadyUnbanned: true });
+    }
+
+    // (Opcional) Avisar cliente(s) conectados que o status mudou:
+    // io.to(`user:${userId}`).emit("accountStatusChanged", { isBanned: false });
+
+    return res.json({ ok: true, user: updated });
+  } catch (err) {
+    console.error("POST /unban error:", err);
+    return res.status(500).json({ message: "Erro ao desbanir usuário." });
+  }
 });
 
 // GET /api/adm/bannedUsers
