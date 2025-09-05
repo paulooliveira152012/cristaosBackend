@@ -10,6 +10,7 @@ const {
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
+const Report = require("../models/Reports");
 const DirectMessageRequest = require("../models/DirectMessage");
 const Conversation = require("../models/Conversation");
 const Message = require("../models/Message");
@@ -506,7 +507,7 @@ router.post("/login", async (req, res) => {
     if (!user.password) {
       return res.status(403).json({
         message:
-          "Essa conta foi criada com o login do Google. Use 'Entrar com Google' ou 'Esqueci minha senha'.",
+          "Essa conta foi criada com o login do Google. Use 'Entrar com Google' ou 'redefinir aqui'.",
       });
     }
 
@@ -1171,5 +1172,56 @@ router.post("/saveBio", protect, async (req, res) => {
     res.status(500).json({ message: "Erro ao salvar bio." });
   }
 });
+
+// POST /api/users/report
+// POST /api/reports
+router.post("/reports", protect, async (req, res) => {
+  try {
+    const reporterId = req.user._id; // ← vem do JWT (protect)
+    const { targetId, reason, source, context } = req.body;
+
+    if (!targetId || !mongoose.isValidObjectId(targetId)) {
+      return res.status(400).json({ message: "targetId inválido/ausente" });
+    }
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ message: "Motivo é obrigatório" });
+    }
+    if (String(reporterId) === String(targetId)) {
+      return res.status(400).json({ message: "Você não pode reportar a si mesmo." });
+    }
+
+    // (opcional) dedupe simples por janela de tempo
+    const now = new Date();
+    const since = new Date(now.getTime() - 10 * 60 * 1000); // 10min
+    const existing = await Report.findOne({
+      reportedUser: targetId,
+      reportingUser: reporterId,
+      reason: reason.trim(),
+      createdAt: { $gte: since },
+    });
+
+    if (existing) {
+      return res.json({ ok: true, deduped: true, reportId: existing._id });
+    }
+
+    const report = await Report.create({
+      reportedUser: targetId,
+      reportingUser: reporterId,
+      reason: reason.trim(),
+      source: source || "unknown",
+      context: context || null,
+      status: "pending",
+    });
+
+    console.log("report criado!")
+
+    return res.json({ ok: true, reportId: report._id, deduped: false });
+  } catch (err) {
+    console.error("POST /api/reports error:", err);
+    return res.status(500).json({ message: "Erro ao registrar reporte" });
+  }
+});
+
+
 
 module.exports = router;
