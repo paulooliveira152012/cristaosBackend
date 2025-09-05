@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const InterMeeting = require("../models/InterMeeting");
+const mongoose = require("mongoose")
 
 // POST /api/intermeeting/
 router.post("/", async (req, res) => {
@@ -326,6 +327,28 @@ router.put("/:id", async (req, res) => {
   } catch (err) {
     console.error("PUT /intermeeting/:id error:", err);
     res.status(500).json({ message: "Erro ao atualizar reunião" });
+  }
+});
+
+
+router.get("/intermeetings/:id", async (req, res) => {
+  console.log("busca de dados da reuniao")
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ ok: false, message: "ID inválido." });
+    }
+
+    const doc = await InterMeeting.findById(id).lean();
+    if (!doc) {
+      return res.status(404).json({ ok: false, message: "Reunião não encontrada." });
+    }
+
+    // Retorna cru; o front já normaliza.
+    return res.status(200).json({ ok: true, item: doc });
+  } catch (err) {
+    console.error("GET /intermeetings/:id error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao carregar a reunião." });
   }
 });
 
