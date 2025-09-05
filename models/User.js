@@ -202,6 +202,8 @@ const userSchema = new mongoose.Schema(
       set: (v) => (Array.isArray(v) ? v.filter(Boolean) : []), // converte "" -> []
     },
 
+    pendingStrikes: { type: Number, default: 0 },
+
     isBanned: { type: Boolean, default: false },
     bannedAt: { type: Date, default: null },
     bannedBy: {

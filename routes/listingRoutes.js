@@ -18,7 +18,8 @@ const { protect } = require("../utils/auth"); // middleware de autenticação
 // Get All Listings + Reposts no mesmo payload
 router.get("/alllistings", async (req, res) => {
   try {
-    const listings = await Listing.find({})
+    const filter = { hidden: {$ne: true} }
+    const listings = await Listing.find(filter)
       .populate({
         path: "userId",
         select: "username profileImage",

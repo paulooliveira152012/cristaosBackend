@@ -47,6 +47,8 @@ const listingSchema = new Schema({
   // Contador para consultas rápidas
   sharesCount: { type: Number, default: 0 },
 
+  hidden: { type: Boolean, default: false },
+
   createdAt: { type: Date, default: Date.now },
 });
 
