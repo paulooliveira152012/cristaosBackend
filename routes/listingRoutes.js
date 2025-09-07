@@ -268,20 +268,34 @@ router.get("/users/:userId", async (req, res) => {
 
 // Get Listing by ID
 router.get("/listings/:id", async (req, res) => {
-  console.log("backend reached for fetch items [WITHOUT COMMENTS] ");
+  console.log("backend reached for fetch items [WITH COMMENTS NOW!] ");
 
   const { id } = req.params;
   console.log("the listing id is", id);
 
   try {
-    const listing = await Listing.findById(id);
-    if (!listing) return res.status(404).json({ message: "Listing not found" });
+    const listing = await Listing.findById(id)
+        .populate({
+        path: "userId",
+        select: "username profileImage",
+        match: { isBanned: { $ne: true } },
+      })
+      .populate({
+        path: "likes",
+        select: "username profileImage",
+        match: { isBanned: { $ne: true } },
+      })
+      .populate({
+        path: "comments.user",
+        select: "username profileImage",
+        match: { isBanned: { $ne: true } },
+      })
+      .lean();
 
-    // fetch only commments with matching ID
-    const comments = await Comment.find({ listingId: id });
+      if (!listing) return res.status(404).json({ message: "Listing not found" });
 
-    console.log("sending the data to frontEnd:", { listing, comments });
-    res.status(200).json({ listing, comments });
+    console.log("sending the data to frontEnd:", { listing });
+    res.status(200).json({ listing });
   } catch (error) {
     console.error("Error fetching listing:", error); // Log full error details
     res.status(500).json({ message: "Error fetching listing", error });
