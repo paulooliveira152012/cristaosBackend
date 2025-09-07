@@ -35,6 +35,10 @@ router.get("/alllistings", async (req, res) => {
         select: "username profileImage",
         match: { isBanned: { $ne: true } }, // reposters não banidos
       })
+      .populate({
+        path: "likes",
+
+      })
       .lean();
 
     // 1) remove posts cujo autor foi banido (userId ficou null)
@@ -74,6 +78,8 @@ router.get("/alllistings", async (req, res) => {
 
     // 4) ordena por data (desc)
     feed.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+    console.log("🚀 lsitings:", listings)
 
     return res.status(200).json({ listings: visible, feed });
   } catch (error) {
