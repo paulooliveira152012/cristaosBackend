@@ -22,7 +22,7 @@ const server = http.createServer(app);
 const allowedOrigins = [
   process.env.FRONTEND_URL_DEV, // ex.: http://localhost:3000
   process.env.FRONTEND_URL_DEV_NET, // ex.: http://192.168.15.91:3000
-  process.env.FRONTEND_URL_PROD, // ex.: https://cristaos-frontend.vercel.app
+  process.env.FRONTEND_URL_PROD, // ex.: https://www.cristaosapp.com
   // 'http://127.0.0.1:3000',        // opcional
 ].filter(Boolean);
 

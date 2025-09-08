@@ -12,13 +12,12 @@ const createNotificationUtil = require("../utils/notificationUtils");
 const { uploadToS3 } = require("../utils/s3Uploader"); // sua função já existente
 const { protect } = require("../utils/auth"); // middleware de autenticação
 
-
 // Get All Listings
 // Get All Listings
 // Get All Listings + Reposts no mesmo payload
 router.get("/alllistings", async (req, res) => {
   try {
-    const filter = { hidden: {$ne: true} }
+    const filter = { hidden: { $ne: true } };
     const listings = await Listing.find(filter)
       .populate({
         path: "userId",
@@ -37,7 +36,6 @@ router.get("/alllistings", async (req, res) => {
       })
       .populate({
         path: "likes",
-
       })
       .lean();
 
@@ -69,7 +67,7 @@ router.get("/alllistings", async (req, res) => {
           feed.push({
             type: "repost",
             listing: l,
-            reposter,          // {_id, username, profileImage}
+            reposter, // {_id, username, profileImage}
             createdAt: l.createdAt, // sem timestamp de repost no schema
           });
         }
@@ -77,9 +75,11 @@ router.get("/alllistings", async (req, res) => {
     }
 
     // 4) ordena por data (desc)
-    feed.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    feed.sort(
+      (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+    );
 
-    console.log("🚀 lsitings:", listings)
+    console.log("🚀 lsitings:", listings);
 
     return res.status(200).json({ listings: visible, feed });
   } catch (error) {
@@ -87,8 +87,6 @@ router.get("/alllistings", async (req, res) => {
     return res.status(500).json({ message: "Error fetching listings" });
   }
 });
-
-
 
 // Create Listing
 router.post("/create", async (req, res) => {
@@ -251,10 +249,7 @@ router.get("/users/:userId", async (req, res) => {
           l.shares.some((u) => String(u) === String(userId)),
       }))
       // ordene como preferir; se não usa timestamps, ordene por createdAt desc
-      .sort(
-        (a, b) =>
-          new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
-      );
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
     return res.status(200).json({ user, listings });
   } catch (error) {
@@ -265,7 +260,6 @@ router.get("/users/:userId", async (req, res) => {
   }
 });
 
-
 // Get Listing by ID
 router.get("/listings/:id", async (req, res) => {
   console.log("backend reached for fetch items [WITH COMMENTS NOW!] ");
@@ -275,7 +269,7 @@ router.get("/listings/:id", async (req, res) => {
 
   try {
     const listing = await Listing.findById(id)
-        .populate({
+      .populate({
         path: "userId",
         select: "username profileImage",
         match: { isBanned: { $ne: true } },
@@ -290,9 +284,14 @@ router.get("/listings/:id", async (req, res) => {
         select: "username profileImage",
         match: { isBanned: { $ne: true } },
       })
+      .populate({
+        path: "poll.votes.userId", // 👈 POPULATE DOS VOTANTES
+        select: "username profileImage",
+        match: { isBanned: { $ne: true } },
+      })
       .lean();
 
-      if (!listing) return res.status(404).json({ message: "Listing not found" });
+    if (!listing) return res.status(404).json({ message: "Listing not found" });
 
     console.log("sending the data to frontEnd:", { listing });
     res.status(200).json({ listing });
@@ -434,13 +433,13 @@ router.put(
 // Compartilhar (repost) — SEM criar cópia
 // Compartilhar (repost) — SEM criar cópia
 router.post("/share/:listingId", protect, async (req, res) => {
-  console.log("reposting a shared listing...")
+  console.log("reposting a shared listing...");
   try {
     const { listingId } = req.params;
     const userId = req.user._id; // vem do middleware protect
 
     const result = await Listing.updateOne(
-      { _id: listingId, shares: { $ne: userId } },     // só se ainda não compartilhou
+      { _id: listingId, shares: { $ne: userId } }, // só se ainda não compartilhou
       { $addToSet: { shares: userId }, $inc: { sharesCount: 1 } }
     );
 
@@ -448,7 +447,9 @@ router.post("/share/:listingId", protect, async (req, res) => {
       return res.status(404).json({ message: "Listing não encontrado." });
     }
     if (result.modifiedCount === 0) {
-      return res.status(200).json({ message: "Já compartilhado anteriormente." });
+      return res
+        .status(200)
+        .json({ message: "Já compartilhado anteriormente." });
     }
 
     // (opcional) notificação para o autor
@@ -476,7 +477,7 @@ router.post("/share/:listingId", protect, async (req, res) => {
 
 // Remover compartilhamento
 router.delete("/share/:listingId", protect, async (req, res) => {
-  console.log("deleting shared listing")
+  console.log("deleting shared listing");
   try {
     const { listingId } = req.params;
     const userId = req.user._id;
@@ -496,10 +497,11 @@ router.delete("/share/:listingId", protect, async (req, res) => {
     return res.status(200).json({ message: "Compartilhamento removido." });
   } catch (err) {
     console.error("Erro no unshare:", err);
-    return res.status(500).json({ message: "Erro ao remover compartilhamento." });
+    return res
+      .status(500)
+      .json({ message: "Erro ao remover compartilhamento." });
   }
 });
-
 
 // Delete Listing
 router.delete("/delete/:listingId", async (req, res) => {
