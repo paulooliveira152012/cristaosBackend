@@ -1,8 +1,13 @@
 const express = require("express");
 const router = express.Router();
-const Study = require("../models/Study");
+// const Study = require("../models/BibleStudy");
+const BibleStudy = require("../models/BibleStudy")
+const ThemeStudy = require("../models/ThemeStudy")
 const { protect } = require("../utils/auth");
 const { verifyLeader } = require("../utils/auth");
+const { THEME_ENUM } = require("../models/ThemeStudy")
+
+// ===================================== By bible chapter=====================================
 
 /** Mapa: slug do livro -> número de capítulos */
 const CHAPTERS_BY_BOOK = {
@@ -89,7 +94,7 @@ router.get("/:bookId/chapters", async (req, res) => {
     }
 
     // apenas estudos públicos publicados
-    const rows = await Study.find(
+    const rows = await BibleStudy.find(
       { bookId, status: "published", visibility: "public" },
       { chapter: 1, _id: 0 }
     ).lean();
@@ -142,7 +147,7 @@ router.get("/:bookId/:chapter", async (req, res) => {
       query.visibility = "public";
     }
 
-    const doc = await Study.findOne(query)
+    const doc = await BibleStudy.findOne(query)
       .sort({ updatedAt: -1, _id: -1 })
       .populate({ path: "author", select: "username profileImage" });
 
@@ -190,12 +195,12 @@ router.post("/", protect, verifyLeader, async (req, res) => {
         : "published";
 
     // pega o mais recente desse capítulo (se existir) para atualizar
-    const existing = await Study.findOne({ book, chapter: ch }).sort({
+    const existing = await BibleStudy.findOne({ book, chapter: ch }).sort({
       createdAt: -1,
     });
 
     if (!existing) {
-      const created = await Study.create({
+      const created = await BibleStudy.create({
         book,
         bookId,
         chapter: ch,
@@ -230,7 +235,7 @@ router.post("/", protect, verifyLeader, async (req, res) => {
 router.delete("/:id", protect, verifyLeader, async (req, res) => {
   try {
     const { id } = req.params;
-    const gone = await Study.findByIdAndDelete(id);
+    const gone = await BibleStudy.findByIdAndDelete(id);
     if (!gone)
       return res
         .status(404)
@@ -289,7 +294,7 @@ router.put("/:bookId/:chapter", protect, async (req, res) => {
     const query = { bookId, chapter: chapterNum, author: authorId };
     console.log("query:", query);
 
-    const result = await Study.findOneAndUpdate(
+    const result = await BibleStudy.findOneAndUpdate(
       query,
       {
         $set: { title: title.trim(), content: content.trim() },
@@ -317,7 +322,7 @@ router.put("/:bookId/:chapter", protect, async (req, res) => {
     const created = last ? !last.updatedExisting : false;
 
     if (!doc && last?.upserted) {
-      doc = await Study.findById(last.upserted);
+      doc = await BibleStudy.findById(last.upserted);
     }
     if (!doc) {
       return res
@@ -336,5 +341,400 @@ router.put("/:bookId/:chapter", protect, async (req, res) => {
       .json({ ok: false, message: "Erro ao salvar estudo." });
   }
 });
+
+
+// ===================================== By theme =====================================
+
+// helpers
+const clampInt = (v, d = 1) => {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) ? n : d;
+};
+const pick = (obj, keys) =>
+  keys.reduce((acc, k) => (obj[k] !== undefined ? (acc[k] = obj[k], acc) : acc), {});
+
+// ===============================
+// PUBLIC: LISTA APROVADOS (com filtros)
+// GET /api/theme-studies?theme=theology&q=cruz&page=1&limit=10&sort=new
+// ===============================
+router.get("/themeStudy", async (req, res) => {
+  try {
+    const { theme, q, page = "1", limit = "10", sort = "new" } = req.query;
+
+    const filter = { status: "approved" };
+    if (theme) {
+      const themeSlug = String(theme).trim().toLowerCase();
+      if (!THEME_ENUM.includes(themeSlug)) {
+        return res.status(400).json({ ok: false, message: "Tema inválido." });
+      }
+      filter.theme = themeSlug;
+    }
+    if (q && String(q).trim()) {
+      filter.$text = { $search: String(q).trim() };
+    }
+
+    const pg = Math.max(1, clampInt(page, 1));
+    const lim = Math.min(50, Math.max(1, clampInt(limit, 10)));
+
+    const sortMap = {
+      new: { publishedAt: -1, createdAt: -1, _id: -1 },
+      old: { publishedAt: 1, createdAt: 1, _id: 1 },
+    };
+    const sortBy = sortMap[sort] || sortMap.new;
+
+    const [items, total] = await Promise.all([
+      ThemeStudy.find(filter)
+        .sort(sortBy)
+        .skip((pg - 1) * lim)
+        .limit(lim)
+        .populate({ path: "author", select: "username profileImage" })
+        .exec(),
+      ThemeStudy.countDocuments(filter),
+    ]);
+
+    res.set("Cache-Control", "public, max-age=60");
+    return res.json({ ok: true, items, total, page: pg, pageSize: items.length });
+  } catch (err) {
+    console.error("GET /api/theme-studies error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao listar estudos por tema." });
+  }
+});
+
+// ===============================
+// PUBLIC: OBTÉM 1 APROVADO POR ID
+// GET /api/theme-studies/:id
+// ===============================
+router.get("/themeStudy/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const doc = await ThemeStudy.findById(id)
+      .populate({ path: "author", select: "username profileImage" });
+    if (!doc) return res.status(404).json({ ok: false, message: "Estudo não encontrado." });
+
+    if (doc.status !== "approved") {
+      // público só vê aprovados
+      return res.status(404).json({ ok: false, message: "Estudo não aprovado." });
+    }
+    res.set("Cache-Control", "public, max-age=60");
+    return res.json({ ok: true, item: doc });
+  } catch (err) {
+    console.error("GET /api/theme-studies/:id error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao carregar estudo." });
+  }
+});
+
+// ===============================
+// PROTECTED: CRIAR (member envia para aprovação)
+// POST /api/theme-studies
+// body: { title, theme, content, image? }
+// ===============================
+router.post("/themeStudy", protect, async (req, res) => {
+  try {
+    const { title, theme, content, image } = req.body || {};
+    const themeSlug = String(theme || "").trim().toLowerCase();
+
+    if (!title?.trim()) return res.status(400).json({ ok: false, message: "title é obrigatório." });
+    if (!content?.trim()) return res.status(400).json({ ok: false, message: "content é obrigatório." });
+    if (!THEME_ENUM.includes(themeSlug)) {
+      return res.status(400).json({ ok: false, message: "theme inválido." });
+    }
+
+    const payload = {
+      author: req.user._id,
+      title: title.trim(),
+      theme: themeSlug,
+      content: content.trim(),
+      status: "pending",
+    };
+    if (image?.url) {
+      payload.image = {
+        url: String(image.url).trim(),
+        alt: (image.alt && String(image.alt).trim()) || undefined,
+      };
+    }
+
+    const created = await ThemeStudy.create(payload);
+    const out = await created.populate({ path: "author", select: "username profileImage" });
+    return res.status(201).json({ ok: true, item: out });
+  } catch (err) {
+    console.error("POST /api/theme-studies error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao criar estudo temático." });
+  }
+});
+
+// ===============================
+// PROTECTED: LISTA “MEUS” ESTUDOS (qualquer status)
+// GET /api/theme-studies/mine?status=pending|approved|rejected&theme=&q=&page=&limit=
+// ===============================
+router.get("/themeStudy/mine/list", protect, async (req, res) => {
+  try {
+    const { status, theme, q, page = "1", limit = "10" } = req.query;
+    const filter = { author: req.user._id };
+    if (status && ["pending", "approved", "rejected"].includes(status)) filter.status = status;
+    if (theme) {
+      const themeSlug = String(theme).trim().toLowerCase();
+      if (!THEME_ENUM.includes(themeSlug)) return res.status(400).json({ ok: false, message: "Tema inválido." });
+      filter.theme = themeSlug;
+    }
+    if (q && String(q).trim()) filter.$text = { $search: String(q).trim() };
+
+    const pg = Math.max(1, clampInt(page, 1));
+    const lim = Math.min(50, Math.max(1, clampInt(limit, 10)));
+
+    const [items, total] = await Promise.all([
+      ThemeStudy.find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((pg - 1) * lim)
+        .limit(lim)
+        .populate({ path: "author", select: "username profileImage" })
+        .exec(),
+      ThemeStudy.countDocuments(filter),
+    ]);
+
+    return res.json({ ok: true, items, total, page: pg, pageSize: items.length });
+  } catch (err) {
+    console.error("GET /api/theme-studies/mine error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao listar seus estudos." });
+  }
+});
+
+// ===============================
+// PROTECTED + LEADER: MODERAÇÃO
+// GET /api/theme-studies/mod?status=pending&theme=&q=&page=&limit=
+// ===============================
+router.get("/themeStudy/mod/list", protect, verifyLeader, async (req, res) => {
+  try {
+    const { status = "pending", theme, q, page = "1", limit = "10" } = req.query;
+    const filter = {};
+    if (status && ["pending", "approved", "rejected"].includes(status)) filter.status = status;
+    if (theme) {
+      const themeSlug = String(theme).trim().toLowerCase();
+      if (!THEME_ENUM.includes(themeSlug)) return res.status(400).json({ ok: false, message: "Tema inválido." });
+      filter.theme = themeSlug;
+    }
+    if (q && String(q).trim()) filter.$text = { $search: String(q).trim() };
+
+    const pg = Math.max(1, clampInt(page, 1));
+    const lim = Math.min(50, Math.max(1, clampInt(limit, 10)));
+
+    const [items, total] = await Promise.all([
+      ThemeStudy.find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((pg - 1) * lim)
+        .limit(lim)
+        .populate({ path: "author", select: "username profileImage" })
+        .exec(),
+      ThemeStudy.countDocuments(filter),
+    ]);
+
+    return res.json({ ok: true, items, total, page: pg, pageSize: items.length });
+  } catch (err) {
+    console.error("GET /api/theme-studies/mod error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao listar para moderação." });
+  }
+});
+
+// ===============================
+// PROTECTED: EDITAR (autor) — volta para pending se estava approved
+// PUT /api/theme-studies/:id
+// body: { title?, theme?, content?, image? }
+// ===============================
+router.put("/themeStudy/:id", protect, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const doc = await ThemeStudy.findById(id);
+    if (!doc) return res.status(404).json({ ok: false, message: "Estudo não encontrado." });
+
+    const isLeader = !!(req.user?.leader || req.user?.role === "leader");
+    const isOwner = String(doc.author) === String(req.user._id);
+    if (!isOwner && !isLeader) {
+      return res.status(403).json({ ok: false, message: "Sem permissão para editar." });
+    }
+
+    const allowed = pick(req.body || {}, ["title", "theme", "content", "image"]);
+    if (allowed.title) doc.title = String(allowed.title).trim();
+    if (allowed.theme) {
+      const themeSlug = String(allowed.theme).trim().toLowerCase();
+      if (!THEME_ENUM.includes(themeSlug)) return res.status(400).json({ ok: false, message: "Tema inválido." });
+      doc.theme = themeSlug;
+    }
+    if (allowed.content) doc.content = String(allowed.content).trim();
+    if (allowed.image) {
+      const img = allowed.image || {};
+      doc.image = img?.url ? { url: String(img.url).trim(), alt: img.alt ? String(img.alt).trim() : undefined } : undefined;
+    }
+
+    // Se autor (não-líder) editar um aprovado, volta pra pending
+    if (!isLeader && doc.status === "approved") {
+      doc.status = "pending";
+      doc.approvedBy = undefined;
+      doc.approvedAt = undefined;
+      doc.publishedAt = undefined;
+      doc.rejectionReason = undefined;
+    }
+
+    await doc.save();
+    const out = await doc.populate({ path: "author", select: "username profileImage" });
+    return res.json({ ok: true, item: out });
+  } catch (err) {
+    console.error("PUT /api/theme-studies/:id error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao atualizar estudo." });
+  }
+});
+
+// ===============================
+// PROTECTED + LEADER: APROVAR
+// PUT /api/theme-studies/:id/approve
+// body (opcional): { publishedAt }
+// ===============================
+router.put("/themeStudy/:id/approve", protect, verifyLeader, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const doc = await ThemeStudy.findById(id);
+    if (!doc) return res.status(404).json({ ok: false, message: "Estudo não encontrado." });
+
+    doc.status = "approved";
+    doc.approvedBy = req.user._id;
+    doc.approvedAt = new Date();
+    doc.publishedAt = req.body?.publishedAt ? new Date(req.body.publishedAt) : (doc.publishedAt || new Date());
+    doc.rejectionReason = undefined;
+
+    await doc.save();
+    const out = await doc.populate({ path: "author", select: "username profileImage" });
+    return res.json({ ok: true, item: out });
+  } catch (err) {
+    console.error("PUT /api/theme-studies/:id/approve error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao aprovar estudo." });
+  }
+});
+
+// ===============================
+// PROTECTED + LEADER: REJEITAR
+// PUT /api/theme-studies/:id/reject
+// body: { reason? }
+// ===============================
+router.put("/themeStudy/:id/reject", protect, verifyLeader, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body || {};
+    const doc = await ThemeStudy.findById(id);
+    if (!doc) return res.status(404).json({ ok: false, message: "Estudo não encontrado." });
+
+    doc.status = "rejected";
+    doc.rejectionReason = (reason && String(reason).trim()) || "Rejeitado sem justificativa detalhada.";
+    doc.approvedBy = undefined;
+    doc.approvedAt = undefined;
+    doc.publishedAt = undefined;
+
+    await doc.save();
+    const out = await doc.populate({ path: "author", select: "username profileImage" });
+    return res.json({ ok: true, item: out });
+  } catch (err) {
+    console.error("PUT /api/theme-studies/:id/reject error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao rejeitar estudo." });
+  }
+});
+
+// ===============================
+// PROTECTED: EXCLUIR (autor ou líder)
+// DELETE /api/theme-studies/:id
+// ===============================
+router.delete("/themeStudy/:id", protect, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const doc = await ThemeStudy.findById(id);
+    if (!doc) return res.status(404).json({ ok: false, message: "Estudo não encontrado." });
+
+    const isLeader = !!(req.user?.leader || req.user?.role === "leader");
+    const isOwner = String(doc.author) === String(req.user._id);
+    if (!isOwner && !isLeader) {
+      return res.status(403).json({ ok: false, message: "Sem permissão para excluir." });
+    }
+
+    await doc.deleteOne();
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /api/theme-studies/:id error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao excluir estudo." });
+  }
+});
+
+// ===============================
+// PUBLIC: LISTAR ESTUDOS APROVADOS (com filtros)
+// GET /api/studies/themeStudy/public/list?theme=&q=&page=&limit=&sort=new|old
+// ===============================
+router.get("/themeStudy/public/list", async (req, res) => {
+  console.log("Buscando estudos por tema...")
+  try {
+    const { theme, q, page = "1", limit = "10", sort = "new" } = req.query;
+
+    const filter = { status: "approved" };
+    if (theme) {
+      const themeSlug = String(theme).trim().toLowerCase();
+      if (!THEME_ENUM.includes(themeSlug)) {
+        return res.status(400).json({ ok: false, message: "Tema inválido." });
+      }
+      filter.theme = themeSlug;
+    }
+    if (q && String(q).trim()) {
+      filter.$text = { $search: String(q).trim() };
+    }
+
+    const pg = Math.max(1, clampInt(page, 1));
+    const lim = Math.min(50, Math.max(1, clampInt(limit, 10)));
+
+    const sortMap = {
+      new: { publishedAt: -1, createdAt: -1, _id: -1 },
+      old: { publishedAt: 1, createdAt: 1, _id: 1 },
+    };
+    const sortBy = sortMap[sort] || sortMap.new;
+
+    const [items, total] = await Promise.all([
+      ThemeStudy.find(filter)
+        .sort(sortBy)
+        .skip((pg - 1) * lim)
+        .limit(lim)
+        .populate({ path: "author", select: "username profileImage" })
+        .exec(),
+      ThemeStudy.countDocuments(filter),
+    ]);
+
+    console.log("items:", items)
+
+    res.set("Cache-Control", "public, max-age=60");
+    return res.json({ ok: true, items, total, page: pg, pageSize: items.length });
+  } catch (err) {
+    console.error("GET /api/studies/themeStudy/public/list error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao listar estudos por tema." });
+  }
+});
+
+/**
+ * GET /api/studies/theme-studies/:id
+ * Retorna um estudo temático público (aprovado) por ID.
+ */
+// rota simples, sem regex, sem nada extra
+router.get("/themeStudy/id/:id", async (req, res) => {
+  console.log("✅ buscando estudo individual (by-id)...", req.params);
+  try {
+    const { id } = req.params;
+
+    const item = await ThemeStudy.findOne({ _id: id, status: "approved" })
+      .populate({ path: "author", select: "username profileImage" })
+      .lean();
+
+    if (!item) {
+      return res.status(404).json({ ok: false, message: "Estudo não encontrado." });
+    }
+
+    return res.json({ ok: true, item });
+  } catch (err) {
+    console.error("GET /api/studies/themeStudy/id/:id error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao buscar estudo." });
+  }
+});
+
+
+
 
 module.exports = router;
