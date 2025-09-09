@@ -81,34 +81,33 @@ const CHAPTERS_BY_BOOK = {
  * -> { ok:true, items:[{chapter,hasStudy}], total }
  */
 router.get("/:bookId/chapters", async (req, res) => {
-  console.log("rota de busacar todos os capitulos");
   try {
-    const book = String(req.params.bookId || "")
-      .trim()
-      .toLowerCase();
-    const total = CHAPTERS_BY_BOOK[book];
+    const bookId = String(req.params.bookId || "").trim().toLowerCase();
+    const total = CHAPTERS_BY_BOOK[bookId];
     if (!total) {
-      return res
-        .status(400)
-        .json({ ok: false, message: "Livro inválido/desconhecido." });
+      return res.status(400).json({ ok:false, message:"Livro inválido/desconhecido." });
     }
 
-    const rows = await Study.find({ book }, { chapter: 1, status: 1 }).lean();
-    const set = new Set(rows.map((r) => Number(r.chapter)));
+    // apenas estudos públicos publicados
+    const rows = await Study.find(
+      { bookId, status: "published", visibility: "public" },
+      { chapter: 1, _id: 0 }
+    ).lean();
 
+    const set = new Set(rows.map(r => Number(r.chapter)));
     const items = Array.from({ length: total }, (_, i) => {
       const ch = i + 1;
       return { chapter: ch, hasStudy: set.has(ch) };
     });
 
-    return res.json({ ok: true, items, total });
+    res.set("Cache-Control", "public, max-age=60");
+    return res.json({ ok:true, items, total });
   } catch (err) {
-    console.error("GET /studies/:bookId/chapters error:", err);
-    return res
-      .status(500)
-      .json({ ok: false, message: "Erro ao listar capítulos." });
+    console.error("GET /:bookId/chapters error:", err);
+    return res.status(500).json({ ok:false, message:"Erro ao listar capítulos." });
   }
 });
+
 
 /**
  * GET /api/studies/:bookId/:chapter
@@ -118,42 +117,45 @@ router.get("/:bookId/chapters", async (req, res) => {
  * se não houver publicado, retorna o mais recente de qualquer status.
  */
 // routes/studies.js
-router.get("/:bookId/:chapter", protect, async (req, res) => {
+router.get("/:bookId/:chapter", async (req, res) => {
   try {
-    const bookId = String(req.params.bookId || "")
-      .trim()
-      .toLowerCase();
+    const bookId = String(req.params.bookId || "").trim().toLowerCase();
     const chapterNum = Number(req.params.chapter);
     if (!bookId || !Number.isInteger(chapterNum) || chapterNum < 1) {
-      return res
-        .status(400)
-        .json({ ok: false, message: "Parâmetros inválidos." });
+      return res.status(400).json({ ok:false, message:"Parâmetros inválidos." });
     }
 
-    const isLeader = !!(req.user?.leader || req.user?.role === "leader");
-    // permite ?author=... apenas pra líderes; senão usa o próprio usuário
+    const user = req.user; // pode ser undefined em rota pública
+    const isLeader = !!(user?.leader || user?.role === "leader");
     const requestedAuthor = req.query.author;
-    const authorId =
-      requestedAuthor && isLeader ? requestedAuthor : req.user._id;
+    const mine = req.query.mine === "1";
 
-    const doc = await Study.findOne({
-      bookId,
-      chapter: chapterNum,
-      author: authorId,
-    }).populate({ path: "author", select: "username profileImage" });
+    let query = { bookId, chapter: chapterNum };
 
-    if (!doc)
-      return res
-        .status(404)
-        .json({ ok: false, message: "Estudo não encontrado." });
-    return res.json({ ok: true, item: doc });
+    if (user && mine) {
+      query.author = user._id;
+    } else if (user && isLeader && requestedAuthor) {
+      query.author = requestedAuthor;
+    } else {
+      // visitante: só conteúdo público publicado
+      query.status = "published";
+      query.visibility = "public";
+    }
+
+    const doc = await Study.findOne(query)
+      .sort({ updatedAt: -1, _id: -1 })
+      .populate({ path: "author", select: "username profileImage" });
+
+    if (!doc) return res.status(404).json({ ok:false, message:"Estudo não encontrado." });
+
+    res.set("Cache-Control", "public, max-age=60");
+    return res.json({ ok:true, item: doc });
   } catch (e) {
-    console.error("GET /studies error:", e);
-    return res
-      .status(500)
-      .json({ ok: false, message: "Erro ao carregar estudo." });
+    console.error("GET /:bookId/:chapter error:", e);
+    return res.status(500).json({ ok:false, message:"Erro ao carregar estudo." });
   }
 });
+
 
 /**
  * POST /api/studies
