@@ -115,6 +115,12 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
 
+    staff: {
+      type: String,
+      required: false,
+      default: false
+    },
+
     role: {
       type: String,
       required: true,

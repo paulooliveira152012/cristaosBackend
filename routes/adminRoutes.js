@@ -3,6 +3,7 @@ const router = express.Router();
 const Listing = require("../models/Listing"); // modelo do MongoDB
 const User = require("../models/User");
 const Report = require("../models/Reports")
+const ThemeStudy = require("../models/ThemeStudy")
 const mongoose = require("mongoose");
 const Add = require("../models/Add"); // modelo do MongoDB para Add
 const { verifyToken, verifyLeader } = require("../utils/auth"); // middlewares de autenticação/autorização
@@ -416,6 +417,140 @@ router.post("/reports/:id/resolve", protect, verifyLeader, async (req, res) => {
   } catch (err) {
     console.error("POST /reports/:id/resolve error:", err);
     return res.status(500).json({ ok: false, message: "Erro ao resolver report" });
+  }
+});
+
+// studies
+router.get("/themeStudy/allPendingStudies", async (req, res) => {
+  console.log("Listando estudos pendentes");
+  try {
+    const items = await ThemeStudy.find({ status: "pending" })
+      .sort({ createdAt: -1, _id: -1 })
+      .populate({ path: "author", select: "username profileImage" })
+      .lean();
+
+    return res.json({ ok: true, items, total: items.length });
+  } catch (err) {
+    console.error("GET /api/studies/themeStudy/pending error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao listar estudos pendentes." });
+  }
+});
+
+
+// 2) Aprovar um estudo
+// PATCH /api/studies/themeStudy/:id/approve  { approverId }
+router.patch("/themeStudy/:id/approve", async (req, res) => {
+  console.log("aprovando estudo")
+  try {
+    const { id } = req.params;
+    const { approverId } = req.body || {};
+
+
+    const update = {
+      status: "approved",
+      approvedBy: approverId,
+      approvedAt: new Date(),
+      publishedAt: new Date(),
+      rejectionReason: undefined,
+    };
+
+    const item = await ThemeStudy.findOneAndUpdate(
+      { _id: id },
+      update,
+      { new: true }
+    )
+      .populate({ path: "author", select: "username profileImage" })
+      .lean();
+
+    if (!item) {
+      return res.status(404).json({ ok: false, message: "Estudo não encontrado." });
+    }
+
+    console.log("aprovado!")
+
+    return res.json({ ok: true, item });
+  } catch (err) {
+    console.error("PATCH /api/studies/themeStudy/:id/approve error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao aprovar estudo." });
+  }
+});
+
+// 3) Rejeitar um estudo
+// PATCH /api/studies/themeStudy/:id/reject  { reason }
+router.patch("/themeStudy/:id/reject", async (req, res) => {
+  console.log("rejeitando estudo")
+  try {
+    const { id } = req.params;
+    const { reason } = req.body || {};
+
+    if (!Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ ok: false, message: "ID inválido." });
+    }
+
+    const update = {
+      status: "rejected",
+      approvedBy: undefined,
+      approvedAt: undefined,
+      publishedAt: undefined,
+      rejectionReason: reason && String(reason).trim()
+        ? String(reason).trim()
+        : "Rejeitado sem justificativa detalhada.",
+    };
+
+    const item = await ThemeStudy.findOneAndUpdate(
+      { _id: id },
+      update,
+      { new: true }
+    )
+      .populate({ path: "author", select: "username profileImage" })
+      .lean();
+
+    if (!item) {
+      return res.status(404).json({ ok: false, message: "Estudo não encontrado." });
+    }
+
+    return res.json({ ok: true, item });
+  } catch (err) {
+    console.error("PATCH /api/studies/themeStudy/:id/reject error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao rejeitar estudo." });
+  }
+});
+
+// (Opcional) 4) Voltar para pendente
+// PATCH /api/studies/themeStudy/:id/pending
+router.patch("/themeStudy/:id/pending", async (req, res) => {
+  console.log("voltando para pendente")
+  try {
+    const { id } = req.params;
+
+    if (!Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ ok: false, message: "ID inválido." });
+    }
+
+    const update = {
+      status: "pending",
+      approvedBy: undefined,
+      approvedAt: undefined,
+      publishedAt: undefined,
+      rejectionReason: undefined,
+    };
+
+    const item = await ThemeStudy.findOneAndUpdate(
+      { _id: id },
+      update,
+      { new: true }
+    )
+      .populate({ path: "author", select: "username profileImage" })
+      .lean();
+
+    if (!item) {
+      return res.status(404).json({ ok: false, message: "Estudo não encontrado." });
+    }
+
+    return res.json({ ok: true, item });
+  } catch (err) {
+    console.error("PATCH /api/studies/themeStudy/:id/pending error:", err);
+    return res.status(500).json({ ok: false, message: "Erro ao voltar estudo para pendente." });
   }
 });
 

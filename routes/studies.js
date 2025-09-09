@@ -663,12 +663,13 @@ router.delete("/themeStudy/:id", protect, async (req, res) => {
 // PUBLIC: LISTAR ESTUDOS APROVADOS (com filtros)
 // GET /api/studies/themeStudy/public/list?theme=&q=&page=&limit=&sort=new|old
 // ===============================
+// GET /api/studies/themeStudy/public/list
 router.get("/themeStudy/public/list", async (req, res) => {
-  console.log("Buscando estudos por tema...")
   try {
     const { theme, q, page = "1", limit = "10", sort = "new" } = req.query;
 
     const filter = { status: "approved" };
+
     if (theme) {
       const themeSlug = String(theme).trim().toLowerCase();
       if (!THEME_ENUM.includes(themeSlug)) {
@@ -676,12 +677,19 @@ router.get("/themeStudy/public/list", async (req, res) => {
       }
       filter.theme = themeSlug;
     }
+
+    // 🔧 Troca $text por regex (substring, case-insensitive)
+    const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     if (q && String(q).trim()) {
-      filter.$text = { $search: String(q).trim() };
+      const rx = new RegExp(escapeRegex(String(q).trim()), "i");
+      // só título:
+      // filter.title = rx;
+      // título OU conteúdo:
+      filter.$or = [{ title: rx }, { content: rx }];
     }
 
-    const pg = Math.max(1, clampInt(page, 1));
-    const lim = Math.min(50, Math.max(1, clampInt(limit, 10)));
+    const pg = Math.max(1, parseInt(page, 10) || 1);
+    const lim = Math.min(50, Math.max(1, parseInt(limit, 10) || 10));
 
     const sortMap = {
       new: { publishedAt: -1, createdAt: -1, _id: -1 },
@@ -695,19 +703,18 @@ router.get("/themeStudy/public/list", async (req, res) => {
         .skip((pg - 1) * lim)
         .limit(lim)
         .populate({ path: "author", select: "username profileImage" })
+        .lean()
         .exec(),
       ThemeStudy.countDocuments(filter),
     ]);
 
-    console.log("items:", items)
-
-    res.set("Cache-Control", "public, max-age=60");
     return res.json({ ok: true, items, total, page: pg, pageSize: items.length });
   } catch (err) {
     console.error("GET /api/studies/themeStudy/public/list error:", err);
     return res.status(500).json({ ok: false, message: "Erro ao listar estudos por tema." });
   }
 });
+
 
 /**
  * GET /api/studies/theme-studies/:id
