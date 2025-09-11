@@ -406,7 +406,7 @@ module.exports = function initSocket(io) {
     );
 
     /* DISCONNECT */
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
       const uid = socket.data?.userId;
       if (uid) {
         // limpa presença de DMs para este socket
@@ -423,6 +423,39 @@ module.exports = function initSocket(io) {
       }
       removeSocket(socket.id);
       emitOnlineUsers(io);
+
+       try {
+      // 🔎 encontre todas as salas onde esse user é speaker
+      const rooms = await Room.find({ "currentUsersSpeaking._id": uid });
+      for (const room of rooms) {
+        // tira da lista de speakers
+        room.currentUsersSpeaking = room.currentUsersSpeaking.filter(
+          (s) => String(s._id) !== String(uid)
+        );
+
+        // se nenhum owner/admin sobrou nos speakers, encerra live
+        const stillPrivileged = (room.currentUsersSpeaking || []).some((s) =>
+          [String(room.owner?._id), ...(room.admins || []).map((a) => String(a._id))].includes(String(s._id))
+        );
+
+        if (!stillPrivileged) {
+          room.isLive = false;
+          room.currentUsersSpeaking = [];
+        }
+
+        await room.save();
+
+        // emite para todos os clients
+        io.emit("room:live", {
+          roomId: room._id,
+          isLive: room.isLive,
+          speakersCount: (room.currentUsersSpeaking || []).length,
+        });
+      }
+    } catch (err) {
+      console.error("Erro ao processar disconnect speaker:", err);
+    }
+      
     });
   });
 };

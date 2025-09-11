@@ -4,58 +4,236 @@ const router = express.Router();
 const Room = require("../models/Room"); // Import the Room model
 const { protect } = require("../utils/auth")
 
+
+// helpers
+function isOwnerOrAdmin(room, userId) {
+  const id = String(userId);
+  if (String(room.owner?._id) === id) return true;
+  return (room.admins || []).some(a => String(a._id) === id);
+}
+
+function speakersCount(room) {
+  return (room.currentUsersSpeaking || []).length;
+}
+
+function hasPrivilegedSpeaker(room) {
+  const ids = new Set((room.currentUsersSpeaking || []).map(s => String(s._id)));
+  if (room.owner?._id && ids.has(String(room.owner._id))) return true;
+  return (room.admins || []).some(a => ids.has(String(a._id)));
+}
+
+
 // POST /api/rooms - Create a new room
-router.post("/create", async (req, res) => {
+// POST /api/rooms/create - Create a new room
+router.post("/create", protect, async (req, res) => {
   console.log("create room hit");
 
-  const { roomTitle, roomImage, createdBy } = req.body; // Destructure the request body
+  const { roomTitle, roomImage, createdBy } = req.body;
 
-  // Validate the required fields
   if (!roomTitle || !roomImage || !createdBy || !createdBy._id) {
-    console.log("Validation failed");
-    console.log("roomTitle:", roomTitle);
-    console.log("roomImage:", roomImage);
-    console.log("createdBy:", createdBy);
     return res.status(400).json({ message: "All fields are required" });
   }
 
   try {
-    // Create a new room instance using the Room model
+    const creator = {
+      _id: createdBy._id,
+      username: createdBy.username,
+      profileImage: createdBy.profileImage,
+    };
+
     const newRoom = new Room({
       roomTitle,
       roomImage,
-      createdBy: {
-        _id: createdBy._id,
-        username: createdBy.username,
-        profileImage: createdBy.profileImage,
-      },
+      createdBy: creator,
+      owner: creator,            // <- define o dono
+      admins: [],                // pode preencher depois
+      isLive: false,
+      currentUsersSpeaking: [],  // speakers vazios
     });
 
-    // Save the room to the database
     const savedRoom = await newRoom.save();
-
-    // Return the saved room in the response
     res.status(201).json(savedRoom);
   } catch (error) {
-    console.error("Error creating room:", error.message); // Log the error message
-    console.error("Full error details:", error); // Log the full error for debugging
+    console.error("Error creating room:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
+
+// POST /api/rooms/:roomId/live/start
+router.post("/:roomId/live/start", protect, async (req, res) => {
+  const { roomId } = req.params;
+  const user = req.user || req.body.user || req.body; // dependendo do seu 'protect'
+  const userId = user._id || user.id;
+
+  if (!userId) return res.status(401).json({ error: "not authenticated" });
+
+  try {
+    const room = await Room.findById(roomId);
+    if (!room) return res.status(404).json({ error: "Room not found" });
+
+    if (!isOwnerOrAdmin(room, userId)) {
+      return res.status(403).json({ error: "not allowed" });
+    }
+
+    // liga live e garante quem iniciou como speaker (mutado no front)
+    room.isLive = true;
+    const alreadySpeaker = (room.speakers || []).some(s => String(s._id) === String(userId));
+    if (!alreadySpeaker) {
+      room.speakers.push({
+        _id: userId,
+        username: user.username,
+        profileImage: user.profileImage,
+      });
+    }
+    await room.save();
+
+    // socket: acende neon
+    const io = req.app.get("io");
+    io?.emit("room:live", {
+      roomId: room._id,
+      isLive: true,
+      speakersCount: speakersCount(room),
+    });
+
+    res.json({ ok: true, isLive: true, speakersCount: speakersCount(room) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/rooms/:roomId/live/stop
+router.post("/:roomId/live/stop", protect, async (req, res) => {
+  console.log("finalizando sala...")
+  const { roomId } = req.params;
+  const user = req.user || req.body.user || req.body;
+  const userId = user._id || user.id;
+
+  if (!userId) return res.status(401).json({ error: "not authenticated" });
+
+  try {
+    const room = await Room.findById(roomId);
+    if (!room) return res.status(404).json({ error: "Room not found" });
+
+    if (!isOwnerOrAdmin(room, userId)) {
+      return res.status(403).json({ error: "not allowed" });
+    }
+
+    room.isLive = false;
+    room.currentUsersSpeaking = [];
+    await room.save();
+
+    const io = req.app.get("io");
+    io?.emit("room:live", { roomId: room._id, isLive: false, speakersCount: 0 });
+
+    res.json({ ok: true, isLive: false });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/rooms/:roomId/speakers/join
+router.post("/:roomId/speakers/join", protect, async (req, res) => {
+  const { roomId } = req.params;
+  const user = req.user || req.body.user || req.body;
+  const userId = user._id || user.id;
+
+  if (!userId) return res.status(401).json({ error: "not authenticated" });
+
+  try {
+    const room = await Room.findById(roomId);
+    if (!room) return res.status(404).json({ error: "Room not found" });
+    if (!room.isLive) return res.status(409).json({ error: "not live" });
+
+    const exists = (room.currentUsersSpeaking || []).some(s => String(s._id) === String(userId));
+    if (!exists) {
+      room.currentUsersSpeaking.push({
+        _id: userId,
+        username: user.username,
+        profileImage: user.profileImage,
+      });
+      await room.save();
+    }
+
+    const io = req.app.get("io");
+    io?.emit("room:live", {
+      roomId: room._id,
+      isLive: true,
+      speakersCount: speakersCount(room),
+    });
+
+    res.json({ ok: true, speakersCount: speakersCount(room) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/rooms/:roomId/speakers/leave
+router.post("/:roomId/speakers/leave", protect, async (req, res) => {
+  const { roomId } = req.params;
+  const user = req.user || req.body.user || req.body;
+  const userId = user._id || user.id;
+
+  if (!userId) return res.status(401).json({ error: "not authenticated" });
+
+  try {
+    const room = await Room.findById(roomId);
+    if (!room) return res.status(404).json({ error: "Room not found" });
+
+    room.currentUsersSpeaking = (room.currentUsersSpeaking || []).filter(s => String(s._id) !== String(userId));
+
+    // se ninguém com papel (owner/admin) permanecer como speaker -> encerra live
+    if (!hasPrivilegedSpeaker(room)) {
+      room.isLive = false;
+      room.currentUsersSpeaking = [];
+    }
+
+    await room.save();
+
+    const io = req.app.get("io");
+    io?.emit("room:live", {
+      roomId: room._id,
+      isLive: room.isLive,
+      speakersCount: speakersCount(room),
+    });
+
+    res.json({ ok: true, isLive: room.isLive, speakersCount: speakersCount(room) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 
 // GET /api/rooms - Fetch all rooms
+// GET /api/rooms - Fetch all rooms (essencial para a landing)
 router.get("/", async (req, res) => {
   try {
-    // Find all rooms in the database
-    const rooms = await Room.find();
+    const rooms = await Room.find({}, {
+      roomTitle: 1,
+      roomImage: 1,
+      isLive: 1,
+      currentUsersSpeaking: 1, // para calcular no front se quiser
+      createdAt: 1,
+    }).sort({ isLive: -1, createdAt: -1 });
 
-    // Send the rooms back as the response
-    res.status(200).json(rooms);
+    // opcional: mande speakersCount direto
+    const withCount = rooms.map(r => ({
+      ...r.toObject(),
+      speakersCount: (r.currentUsersSpeaking || []).length,
+    }));
+
+    res.status(200).json(withCount);
   } catch (error) {
-    console.error("Error fetching rooms:", error.message);
+    console.error("Error fetching rooms:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
+
+
+
 
 // Route to update room title
 // Route to update room (title and/or image URL)
