@@ -79,7 +79,7 @@ router.get("/alllistings", async (req, res) => {
       (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
     );
 
-    console.log("🚀 lsitings:", listings);
+    // console.log("🚀 lsitings:", listings);
 
     return res.status(200).json({ listings: visible, feed });
   } catch (error) {

@@ -118,7 +118,7 @@ const userSchema = new mongoose.Schema(
     staff: {
       type: String,
       required: false,
-      default: false
+      default: false,
     },
 
     role: {
@@ -219,6 +219,12 @@ const userSchema = new mongoose.Schema(
     },
     banReason: { type: String, default: "" },
     tokenVersion: { type: Number, default: 0 },
+    lastHeartbeat: { type: Date, default: null, index: true },
+    presenceStatus: {
+      type: String,
+      enum: ["active", "idle"],
+      default: "idle",
+    },
   },
   { timestamps: true }
 ); // Automatically adds `createdAt` and `updatedAt` fields

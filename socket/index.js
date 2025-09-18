@@ -1,14 +1,8 @@
 // socket/index.js
 const cookie = require("cookie");
-const Room = require("../models/Room")
 const jwt = require("jsonwebtoken");
-
-const {
-  addUser,
-  removeSocket,
-  emitOnlineUsers,
-  getOnlineUsers,
-} = require("./onlineUsers");
+const User = require("../models/User");
+const Room = require("../models/Room")
 
 const {
   emitChatHistory,
@@ -26,13 +20,10 @@ const {
   minimizeUser,
 } = require("./liveRoomUsers");
 
-const User = require("../models/User");
-const Conversation = require("../models/Conversation");
-const Message = require("../models/Message");
+// ===== Config =====
+const ONLINE_WINDOW_MS = Number(process.env.ONLINE_WINDOW_MS || 3 * 60 * 1000);
 
-/* ===========================
- * Auth helpers
- * =========================== */
+// ===== Auth helpers =====
 function parseCookies(cookieStr = "") {
   try {
     return cookie.parse(cookieStr || "");
@@ -55,44 +46,32 @@ function authMiddleware(io) {
   io.use(async (socket, next) => {
     try {
       const token = getTokenFromSocket(socket);
-      if (!token) {
-        // guests permitidos: apenas não coloca userId
-        return next();
-      }
-
+      if (!token) return next(); // guests permitidos
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // 1) sv (session/global)
       const currentSv = Number(process.env.SESSIONS_VERSION || 1);
-      if (Number(decoded.sv || 1) !== currentSv) {
+      if (Number(decoded.sv || 1) !== currentSv)
         return next(new Error("unauthorized"));
-      }
 
-      // 2) carrega usuário
-      const user = await User.findById(decoded.id).select("_id tokenVersion isBanned");
+      const user = await User.findById(decoded.id).select(
+        "_id tokenVersion isBanned"
+      );
       if (!user) return next(new Error("unauthorized"));
-
-      // 3) tv (tokenVersion por usuário)
-      const tokenTv = Number(decoded.tv || 0);
-      const userTv = Number(user.tokenVersion || 0);
-      if (tokenTv !== userTv) return next(new Error("unauthorized"));
-
-      // 4) ban
+      if (Number(decoded.tv || 0) !== Number(user.tokenVersion || 0))
+        return next(new Error("unauthorized"));
       if (user.isBanned) return next(new Error("banned"));
 
-      // OK: anexa no socket e entra na sala do usuário
       socket.data.userId = String(user._id);
       socket.join(`user:${user._id}`);
-
       next();
     } catch (err) {
       next(new Error("unauthorized"));
     }
   });
 }
-
-const requireAuth = (socket, name, fn) => {
-  return async (...args) => {
+const requireAuth =
+  (socket, name, fn) =>
+  async (...args) => {
     if (!socket.data?.userId) {
       console.warn(`🚫 ${name} ignorado: socket sem userId`);
       return;
@@ -103,72 +82,105 @@ const requireAuth = (socket, name, fn) => {
       console.error(`❌ erro em ${name}:`, err);
     }
   };
-};
 
-/* ===========================
- * Presença em DMs (simples)
- * =========================== */
-const dmPresence = new Map(); // convId -> Map<userId, Set<socketId>>
-function presenceFor(convId) {
-  const k = String(convId);
-  if (!dmPresence.has(k)) dmPresence.set(k, new Map());
-  return dmPresence.get(k);
-}
-function addPresence(convId, userId, socketId) {
-  const map = presenceFor(convId);
-  const uid = String(userId);
-  if (!map.has(uid)) map.set(uid, new Set());
-  map.get(uid).add(socketId);
-  return map;
-}
-function removePresence(convId, userId, socketId) {
-  const k = String(convId);
-  const uid = String(userId);
-  const map = dmPresence.get(k);
-  if (!map) return true;
-  if (map.has(uid)) {
-    map.get(uid).delete(socketId);
-    if (map.get(uid).size === 0) map.delete(uid);
-  }
-  if (map.size === 0) dmPresence.delete(k);
-  return !(map && map.has && map.has(uid));
-}
-function currentUsers(convId) {
-  const map = dmPresence.get(String(convId));
-  return map ? Array.from(map.keys()) : [];
+// ===== Online list via Mongo (lastHeartbeat) =====
+async function getActiveUsersFromDB() {
+  const cutoff = new Date(Date.now() - ONLINE_WINDOW_MS);
+  return User.find({
+    lastHeartbeat: { $gte: cutoff },
+    isBanned: { $ne: true },
+  })
+  .select("_id username profileImage lastHeartbeat presenceStatus")
+  .lean();
 }
 
-/* ===========================
- * Util: registrar online
- * =========================== */
+async function emitOnlineUsersFromDB(io, socket = null) {
+  const list = await getActiveUsersFromDB();
+  (socket || io).emit("onlineUsers", list);
+}
+
+
+// registra online no connect (opcionalmente marca active agora)
 async function registerOnline(socket, io) {
   const uid = socket.data?.userId;
   if (!uid) return;
+
+  // carrega alguns campos úteis no socket
   const user = await User.findById(uid)
     .select("_id username profileImage")
     .lean()
     .catch(() => null);
   if (!user) return;
 
-  // ✨ GUARDE NO SOCKET PARA REUSAR NO LIVE ROOM
-  socket.data.username = user.username; // <--- ADICIONE
-  socket.data.profileImage = user.profileImage; // <--- ADICIONE
-
-  // sala pessoal (opcional)
+  socket.data.username = user.username;
+  socket.data.profileImage = user.profileImage;
   socket.join(`user:${user._id}`);
 
-  addUser({
-    socketId: socket.id,
-    userId: String(user._id),
-    username: user.username,
-    profileImage: user.profileImage,
+  // opcional: já marca ativo e atualiza lastHeartbeat
+  await User.updateOne(
+    { _id: uid },
+    { $set: { presenceStatus: "active", lastHeartbeat: new Date() } }
+  ).catch(() => {});
+
+  // emite lista atualizada
+  await emitOnlineUsersFromDB(io);
+
+  // feedback imediato (apenas pro socket)
+  const selfList = await getActiveUsersFromDB();
+  socket.emit("onlineUsers", selfList);
+}
+
+//  limpeza ao disconectar
+async function cleanupUserOnDisconnect(userId, io) {
+  if (!userId) return;
+
+  const rooms = await Room.find({
+    $or: [
+      { "currentUsers._id": userId },
+      { "currentUsersSpeaking._id": userId },
+      { "speakers._id": userId },
+    ],
   });
 
-  // broadcast geral da lista
-  emitOnlineUsers(io);
+  for (const room of rooms) {
+    const uid = String(userId);
 
-  // feedback imediato para quem entrou
-  socket.emit("onlineUsers", getOnlineUsers());
+    room.currentUsers = (room.currentUsers || []).filter(
+      (u) => String(u._id) !== uid
+    );
+    room.currentUsersSpeaking = (room.currentUsersSpeaking || []).filter(
+      (u) => String(u._id) !== uid
+    );
+    room.speakers = (room.speakers || []).filter((s) => String(s._id) !== uid);
+
+    // se nenhum owner/admin ficou nos speakers, encerra a live
+    const privilegedIds = [
+      String(room.owner?._id),
+      ...(room.admins || []).map((a) => String(a._id)),
+    ];
+    const stillPrivileged = (room.speakers || []).some((s) =>
+      privilegedIds.includes(String(s._id))
+    );
+
+    if (!stillPrivileged) {
+      room.isLive = false;
+      room.speakers = [];
+    }
+
+    await room.save();
+
+    // atualiza os clientes
+    io.emit("liveRoomUsers", {
+      roomId: room._id,
+      users: room.currentUsers,
+      speakers: room.currentUsersSpeaking,
+    });
+    io.emit("room:live", {
+      roomId: room._id,
+      isLive: room.isLive,
+      speakersCount: (room.speakers || []).length,
+    });
+  }
 }
 
 /* ===========================
@@ -189,8 +201,14 @@ module.exports = function initSocket(io) {
     }
 
     /* ONLINE USERS */
-    socket.on("getOnlineUsers", () => {
-      socket.emit("onlineUsers", getOnlineUsers());
+    // ===== Online users (busca no DB) =====
+    socket.on("getOnlineUsers", async () => {
+      try {
+        const list = await getActiveUsersFromDB();
+        socket.emit("onlineUsers", list);
+      } catch {
+        socket.emit("onlineUsers", []);
+      }
     });
 
     socket.on(
@@ -203,8 +221,9 @@ module.exports = function initSocket(io) {
     socket.on(
       "removeSocket",
       requireAuth(socket, "removeSocket", async () => {
-        removeSocket(socket.id);
-        emitOnlineUsers(io);
+        // removeSocket(socket.id);
+        // emitOnlineUsers(io);
+        await emitOnlineUsersFromDB(io);
       })
     );
 
@@ -409,54 +428,20 @@ module.exports = function initSocket(io) {
     /* DISCONNECT */
     socket.on("disconnect", async () => {
       const uid = socket.data?.userId;
+
       if (uid) {
-        // limpa presença de DMs para este socket
-        for (const [convId, map] of dmPresence.entries()) {
-          const s = map.get(String(uid));
-          if (s && s.has(socket.id)) {
-            removePresence(convId, uid, socket.id);
-            io.to(convId).emit("currentUsersInPrivateChat", {
-              conversationId: convId,
-              users: currentUsers(convId),
-            });
-          }
-        }
+        // 1) limpa participação em salas/speakers e encerra live se preciso
+        await cleanupUserOnDisconnect(uid, io);
+
+        // 2) opcional: marca como idle imediatamente
+        await User.updateOne(
+          { _id: uid },
+          { $set: { presenceStatus: "idle" } }
+        ).catch(() => {});
       }
-      removeSocket(socket.id);
-      emitOnlineUsers(io);
 
-       try {
-      // 🔎 encontre todas as salas onde esse user é speaker
-      const rooms = await Room.find({ "currentUsersSpeaking._id": uid });
-      for (const room of rooms) {
-        // tira da lista de speakers
-        room.speakers = room.speakers.filter(
-          (s) => String(s._id) !== String(uid)
-        );
-
-        // se nenhum owner/admin sobrou nos speakers, encerra live
-        const stillPrivileged = (room.speakers || []).some((s) =>
-          [String(room.owner?._id), ...(room.admins || []).map((a) => String(a._id))].includes(String(s._id))
-        );
-
-        if (!stillPrivileged) {
-          room.isLive = false;
-          room.speakers = [];
-        }
-
-        await room.save();
-
-        // emite para todos os clients
-        io.emit("room:live", {
-          roomId: room._id,
-          isLive: room.isLive,
-          speakersCount: (room.speakers || []).length,
-        });
-      }
-    } catch (err) {
-      console.error("Erro ao processar disconnect speaker:", err);
-    }
-      
+      // 3) reemite a lista de online baseada no Mongo (lastHeartbeat)
+      await emitOnlineUsersFromDB(io);
     });
   });
 };
