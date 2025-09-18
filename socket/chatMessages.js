@@ -28,6 +28,16 @@ const emitChatHistory = async (socket, roomId) => {
 const handleSendMessage = async ({ io, socket, userId, payload }) => {
   console.log("handleSendMessage...");
 
+  // console.log("io:", io,)
+  // console.log("socket:", socket) 
+  console.log("userId", userId )
+  console.log("payload", payload )
+
+  if (!io || !socket || !userId || !payload) {
+    console.log("🚨 MISSING PARAMS")
+    return
+  }
+
   const roomId = String(payload?.roomId || "mainChatRoom");
   const text = (payload?.text ?? payload?.message ?? "").trim();
 
@@ -74,6 +84,8 @@ const handleSendMessage = async ({ io, socket, userId, payload }) => {
       timestamp: doc.timestamp || doc.createdAt,
       roomId,
     };
+
+    console.log("mensagem enviada e salva no banco!")
 
     // emite para a sala (inclui quem enviou, pois está na sala)
     io.to(roomId).emit("newMessage", out);

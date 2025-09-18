@@ -1,5 +1,6 @@
 // socket/index.js
 const cookie = require("cookie");
+const Room = require("../models/Room")
 const jwt = require("jsonwebtoken");
 
 const {
@@ -429,18 +430,18 @@ module.exports = function initSocket(io) {
       const rooms = await Room.find({ "currentUsersSpeaking._id": uid });
       for (const room of rooms) {
         // tira da lista de speakers
-        room.currentUsersSpeaking = room.currentUsersSpeaking.filter(
+        room.speakers = room.speakers.filter(
           (s) => String(s._id) !== String(uid)
         );
 
         // se nenhum owner/admin sobrou nos speakers, encerra live
-        const stillPrivileged = (room.currentUsersSpeaking || []).some((s) =>
+        const stillPrivileged = (room.speakers || []).some((s) =>
           [String(room.owner?._id), ...(room.admins || []).map((a) => String(a._id))].includes(String(s._id))
         );
 
         if (!stillPrivileged) {
           room.isLive = false;
-          room.currentUsersSpeaking = [];
+          room.speakers = [];
         }
 
         await room.save();
@@ -449,7 +450,7 @@ module.exports = function initSocket(io) {
         io.emit("room:live", {
           roomId: room._id,
           isLive: room.isLive,
-          speakersCount: (room.currentUsersSpeaking || []).length,
+          speakersCount: (room.speakers || []).length,
         });
       }
     } catch (err) {
