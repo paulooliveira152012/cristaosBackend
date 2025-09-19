@@ -84,14 +84,17 @@ const requireAuth =
   };
 
 // ===== Online list via Mongo (lastHeartbeat) =====
+// ===== Online list via Mongo (lastHeartbeat) =====
 async function getActiveUsersFromDB() {
   const cutoff = new Date(Date.now() - ONLINE_WINDOW_MS);
+
   return User.find({
-    lastHeartbeat: { $gte: cutoff },
-    isBanned: { $ne: true },
+    lastHeartbeat: { $gte: cutoff },   // só quem enviou heartbeat dentro da janela
+    isBanned: { $ne: true },           // não banidos
+    presenceStatus: "active",          // só ativos
   })
-  .select("_id username profileImage lastHeartbeat presenceStatus")
-  .lean();
+    .select("_id username profileImage lastHeartbeat presenceStatus")
+    .lean();
 }
 
 async function emitOnlineUsersFromDB(io, socket = null) {
@@ -99,14 +102,15 @@ async function emitOnlineUsersFromDB(io, socket = null) {
     const list = await getActiveUsersFromDB();
 
     // Loga a lista de usuários ativos
-    console.log("🔵 Usuários online:", list);
+    console.log("🔵 Usuários online (ativos):", list);
 
-    // Envia a lista para o frontend
+    // Envia a lista filtrada para o frontend
     (socket || io).emit("onlineUsers", list);
   } catch (err) {
     console.error("❌ Erro ao emitir usuários online:", err);
   }
 }
+
 
 
 // registra online no connect (opcionalmente marca active agora)

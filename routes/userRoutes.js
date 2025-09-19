@@ -566,12 +566,75 @@ router.get("/debug/cookies", (req, res) => {
   res.json(req.cookies);
 });
 
+const ONLINE_WINDOW_MS = Number(process.env.ONLINE_WINDOW_MS || 3 * 60 * 1000);
+
+async function getActiveUsersFromDB() {
+  const cutoff = new Date(Date.now() - ONLINE_WINDOW_MS);
+
+  return User.find({
+    lastHeartbeat: { $gte: cutoff },   // só quem enviou heartbeat dentro da janela
+    isBanned: { $ne: true },           // não banidos
+    presenceStatus: "active",          // só ativos
+  })
+    .select("_id username profileImage lastHeartbeat presenceStatus")
+    .lean();
+}
+
+async function emitOnlineUsersFromDB(io, socket = null) {
+  try {
+    const list = await getActiveUsersFromDB();
+
+    // Loga a lista de usuários ativos
+    console.log("🔵 Usuários online (ativos):", list);
+
+    // Envia a lista filtrada para o frontend
+    (socket || io).emit("onlineUsers", list);
+  } catch (err) {
+    console.error("❌ Erro ao emitir usuários online:", err);
+  }
+}
+
 // User Signout
-router.post("/signout", (req, res) => {
-  const isProd = process.env.NODE_ENV === "production";
-   clearAuthCookie(res);
-  res.json({ ok: true, message: "Sessão encerrada!" });
+// Rota de logout
+router.post("/signout/:userId", async (req, res) => {
+  console.log("signing out");
+
+  // 1) Extrai userId corretamente
+  const { userId } = req.params;
+
+  try {
+    // (Opcional mas recomendado) se tiver auth middleware:
+    // if (!req.user || String(req.user._id) !== String(userId)) {
+    //   return res.status(403).json({ ok: false, message: "Não autorizado" });
+    // }
+
+    // 2) Atualiza presença no banco
+    await User.findByIdAndUpdate(userId, {
+      presenceStatus: "inactive",
+      lastHeartbeat: null, // cuidado: se seu schema exige Date, troque por new Date(0)
+    });
+
+    // 3) Limpa cookie/token
+    clearAuthCookie(res);
+
+    // 4) Emite a lista atualizada para todos (ou apenas para alguns)
+    const io = req.app.get("io");         // garanta que você fez app.set("io", io) no setup
+    if (io) {
+      // se você já tem essa função util
+      try {
+        await emitOnlineUsersFromDB(io);
+      } catch (e) {
+        console.error("Falha ao emitir onlineUsers:", e);
+      }
+    }
+
+    return res.json({ ok: true, message: "Sessão encerrada!" });
+  } catch (err) {
+    console.error("❌ Erro no signout:", err);
+    return res.status(500).json({ ok: false, message: "Erro interno ao encerrar sessão" });
+  }
 });
+
 
 router.delete("/delete-account/:id", protect, async (req, res) => {
   console.log("rota para deletar conta alcançada");
