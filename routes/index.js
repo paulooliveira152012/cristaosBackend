@@ -19,6 +19,7 @@ const presence = require('./presence')
 const privateRoom = require('./privateRoomsRoutes')
 const profile = require('./profileUpdateRoutes')
 const study = require('./studies')
+const suggestion = require('./suggestions')
 
 
 const router = express.Router();
@@ -42,6 +43,7 @@ router.use("/presence", presence)
 router.use("/privateRooms", privateRoom)
 router.use("/profile", profile)
 router.use("/studies", study)
+router.use("/suggestions", suggestion)
 
 module.exports = router;
 
