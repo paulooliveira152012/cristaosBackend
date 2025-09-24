@@ -93,6 +93,7 @@ async function getActiveUsersFromDB() {
     isBanned: { $ne: true },           // não banidos
     presenceStatus: "active",          // só ativos
   })
+  // 👇 [ONLINE: FONTE DA LISTA] Quem aparece "online" no app vem DESTA query
     .select("_id username profileImage lastHeartbeat presenceStatus")
     .lean();
 }
@@ -129,7 +130,7 @@ async function registerOnline(socket, io) {
   socket.data.profileImage = user.profileImage;
   socket.join(`user:${user._id}`);
 
-  // opcional: já marca ativo e atualiza lastHeartbeat
+  // ✅ [ONLINE+: ADICIONADO AO "ONLINE" DO APP]
   await User.updateOne(
     { _id: uid },
     { $set: { presenceStatus: "active", lastHeartbeat: new Date() } }
@@ -391,6 +392,7 @@ module.exports = function initSocket(io) {
     socket.on(
       "joinLiveRoom",
       requireAuth(socket, "joinLiveRoom", async ({ roomId }) => {
+        console.log("inserindo usuario na sala...")
         if (!roomId) return;
         socket.join(String(roomId));
         await addUserToRoom({ io, socket, roomId, userId: socket.data.userId });
@@ -402,6 +404,7 @@ module.exports = function initSocket(io) {
     socket.on(
       "leaveLiveRoom",
       requireAuth(socket, "leaveLiveRoom", async ({ roomId }) => {
+        console.log("removendo usuario da sala...")
         if (!roomId) return;
         socket.leave(String(roomId));
         await removeUserFromRoom({ io, roomId, userId: socket.data.userId });

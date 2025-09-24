@@ -266,6 +266,7 @@ router.post("/:roomId/speakers/leave", protect, async (req, res) => {
 
 // POST /api/rooms/:roomId/leave
 router.post("/:roomId/leave", protect, async (req, res) => {
+  console.log("SAINDO")
   const { roomId } = req.params;
   const userIdStr = String(req.user?._id || "");
 

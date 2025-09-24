@@ -77,17 +77,102 @@ const addUserToRoom = async ({ io, socket, roomId, userId }) => {
 
 // Remove user from a specific room
 //  ASSINATURA NOVA (bate com o index.js)
+// remove user da sala: memória + Mongo + re-emite snapshot
 const removeUserFromRoom = async ({ io, roomId, userId }) => {
+  console.log("Function: removendo usuario da sala...");
   const rid = String(roomId);
-  const uid = String(userId);
+  const uidStr = String(userId);
 
-  const room = liveRoomUsers.get(rid);
-  if (!room) return { changed: false };
+  console.log("roomId:", rid);
+  console.log("userId:", uidStr);
 
-  const changed = room.delete(uid);
-  if (room.size === 0) liveRoomUsers.delete(rid);
-  return { changed };
+  // 1) Memória (Map liveRoomUsers)
+  const roomSet = liveRoomUsers.get(rid);
+  let changed = false;
+  if (roomSet) {
+    changed = roomSet.delete(uidStr) || changed;
+    if (roomSet.size === 0) liveRoomUsers.delete(rid);
+  }
+
+  // 2) MongoDB
+  let modified = 0;
+
+  // tenta converter para ObjectId (se mongoose existir e o id for válido)
+  const ids = [uidStr];
+  try {
+    const mongoose = require("mongoose");
+    if (mongoose?.Types?.ObjectId?.isValid(uidStr)) {
+      ids.push(new mongoose.Types.ObjectId(uidStr));
+    }
+  } catch (_) {
+    // sem mongoose aqui? segue só com string
+  }
+
+  try {
+    // 2.1) Arrays de ObjectId direto
+    const r1 = await Room.updateOne(
+      { _id: rid },
+      {
+        $pull: {
+          currentUsersInRoom: { $in: ids },
+          currentUsers: { $in: ids },
+          currentUsersSpeaking: { $in: ids },
+          speakers: { $in: ids },
+        },
+      }
+    );
+    modified += r1?.modifiedCount || 0;
+
+    // 2.2) Arrays de subdocs com _id
+    const r2 = await Room.updateOne(
+      { _id: rid },
+      {
+        $pull: {
+          currentUsersInRoom: { _id: { $in: ids } },
+          currentUsers: { _id: { $in: ids } },
+          currentUsersSpeaking: { _id: { $in: ids } },
+          speakers: { _id: { $in: ids } },
+        },
+      }
+    );
+    modified += r2?.modifiedCount || 0;
+
+    // 2.3) Arrays de subdocs com campo `user`
+    const r3 = await Room.updateOne(
+      { _id: rid },
+      {
+        $pull: {
+          speakers: { user: { $in: ids } },
+        },
+      }
+    );
+    modified += r3?.modifiedCount || 0;
+
+    // 2.4) (opcional) recalcula speakersCount
+    await Room.updateOne(
+      { _id: rid },
+      [
+        {
+          $set: {
+            speakersCount: { $size: { $ifNull: ["$speakers", []] } },
+          },
+        },
+      ]
+    ).catch(() => {});
+  } catch (err) {
+    console.error("removeUserFromRoom Mongo error:", err);
+  }
+
+  // 3) reemite estado atualizado
+  try {
+    await emitLiveRoomUsers(io, rid);
+  } catch (e) {
+    console.warn("emitLiveRoomUsers erro:", e);
+  }
+
+  return { changed: changed || modified > 0 };
 };
+
 
 // Emit the list of users in a room to all clients in that room
 // 🔔 snapshot: se passar `targetSocket`, envia só pra ele; senão, broadcast pra sala
